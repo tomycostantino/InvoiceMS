@@ -1,2 +1,6 @@
 
+.vscode
+.idea
+invoice_creation/templates
+__pycache__
 .DS_Store
