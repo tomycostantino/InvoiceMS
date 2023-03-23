@@ -10,22 +10,24 @@ def read_csv(filename):
         return [row for row in reader]
 
 
-def parse_context_to_data(context, row):
-    parsed_context = {}
-    for i in context:
-        parsed_context[i] = row[i]
-    return parsed_context
+def generate_context(data):
+    context = {}
+    for idx, value in enumerate(data[0]):   # data[0] is the header of the csv
+        context[idx] = value
+
+    return context
 
 
-def fill_template(template, data, context):
+def fill_template(template, data):
     # Loop through the data and generate the invoices
 
+    context = generate_context(data)
+
     for i, row in enumerate(data):
-        parsed_context = parse_context_to_data(context, row)
 
         # Render the template with the data and save the resulting file
-        filename = f"/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/templates/template_4/generated_docx/invoice_{i + 1}.docx"
-        template.render(parsed_context)
+        filename = f"/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/templates/temp_1/generated_docx/invoice_{i + 1}.docx"
+        template.render(row)
         template.save(filename)
 
 
@@ -34,18 +36,10 @@ def main():
     data = read_csv(input('Insert csv filename with extension included: '))
     # Load the template file
     template = DocxTemplate(
-        '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/templates/template_4/template_4.docx')
+        '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/templates/temp_1/1.docx')
 
-    context = {1: "full_name",
-               2: "city_postcode",
-               3: "country",
-               4: "reference_n",
-               5: "invoice_date",
-               6: "invoice_n",
-               7: "ps",
-               8: "subtotal",
-               9: "gst",
-               10: "total",}
+    fill_template(template, data)
 
-    fill_template(template, data, context)
 
+if __name__ == '__main__':
+    main()
