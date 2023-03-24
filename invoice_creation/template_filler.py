@@ -1,6 +1,7 @@
 import csv
 from docxtpl import DocxTemplate
 import json
+import ast
 
 
 def read_csv(filename):
@@ -27,6 +28,7 @@ def fill_template(template, data):
 
         # Render the template with the data and save the resulting file
         filename = f"/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/templates/temp_1/generated_docx/invoice_{i + 1}.docx"
+        row['data'] = ast.literal_eval(row['data'])
         template.render(row)
         template.save(filename)
 
