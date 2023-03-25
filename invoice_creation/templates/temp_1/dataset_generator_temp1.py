@@ -5,11 +5,11 @@ from faker import Faker
 fake = Faker()
 
 
-def generate_invoices(amount: int):
+def generate_dataset(rows: int):
 
-    invoices = []
+    invoices_list = []
 
-    for i in range(amount):
+    for i in range(rows):
         # create random data
         issuer = fake.company()
         issuer_address = fake.address()
@@ -30,6 +30,7 @@ def generate_invoices(amount: int):
             row[3] = "${:.2f}".format(row[3])  # format amount as currency
 
         total = sum([float(row[3][1:]) for row in data])  # convert amount string to float and sum
+
         # create invoice dictionary
         invoice = {
             "issuer": issuer,
@@ -46,23 +47,21 @@ def generate_invoices(amount: int):
             "support_email": f"support@reallygreatsite.com"
         }
 
-        invoices.append(invoice)
+        invoices_list.append(invoice)
 
-    return invoices
+    return invoices_list
 
 
-def write_csv(filename: str, invoices):
-    fieldnames = ['issuer', 'issuer_address', 'phone', 'invoice_n', 'date', 'billed_to', 'billing_address', 'data',
-                  'total', 'bank_name', 'account_n', 'support_email']
+def write_csv(filename: str, invoices_list):
     # write invoices to CSV file
     with open(filename, 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer = csv.DictWriter(csvfile, fieldnames=invoices_list[0].keys())
         writer.writeheader()
-        for invoice in invoices:
+        for invoice in invoices_list:
             writer.writerow(invoice)
 
 
 if __name__ == '__main__':
     # generate invoices
-    invoices = generate_invoices(100)
+    invoices = generate_dataset(100)
     write_csv('dataset.csv', invoices)

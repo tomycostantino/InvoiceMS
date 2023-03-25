@@ -5,3 +5,4 @@ __pycache__
 .DS_Store
 /invoice_creation/templates/template_4/
 /invoice_creation/templates/temp_1/generated_docx/
+/invoice_creation/templates/temp_1/generated_pdf/
