@@ -61,5 +61,4 @@ if __name__ == '__main__':
     # generate invoices
     gen = DatasetGeneratorTemplate1()
     rows = gen.create_dataset(200)
-    print(type(list(rows[0].keys())))
     gen.write_csv(input('File output name without csv: ') + '.csv', rows[0].keys(), rows)

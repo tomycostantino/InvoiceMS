@@ -4,7 +4,7 @@ import csv
 
 class DatasetGeneratorBase:
     def __init__(self):
-        self.fake = Faker()
+        pass
 
     def write_csv(self, file, fieldnames, rows):
         # write invoices to CSV file
