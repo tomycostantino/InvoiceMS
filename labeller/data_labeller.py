@@ -2,6 +2,7 @@ import fitz
 import csv
 import typing
 import os
+import ast
 
 
 class DataLabeller:
@@ -12,6 +13,8 @@ class DataLabeller:
         self._input_path = ''
 
         self._output_path = ''
+
+        self._already_found = []
 
         # open csv file
         self._rows = []
@@ -40,28 +43,30 @@ class DataLabeller:
 
     def _get_words(self, value: str):
         # get the words one by one and as a list
+        if value.__contains__('-'):
+            value = value.replace('-', '- ')
         return [v for v in value.split(' ')]
 
-    def _find_words(self, words: typing.List):
+    def _find_words(self, page, words: typing.List):
         # it will be a dictionary with the key as the word string and the value
         # will be the word's x0,y0,x1,y1 values
         word_coordinates = {}
 
         # get all words present in pages
-        word_list = []
-        for page in self._pdf_file.pages():
-            # append the values of all pages into one list
-            word_list += page.get_text('words')
+        word_list = page.get_text('words')
 
         # go through all words and see which ones match
         for word in word_list:
             # check list isn't empty, if it is then there is no need to keep looking
             if words:
                 # if the word string is in the list
-                if word[4] in words:
+                if words.__contains__(word[4]) and word not in self._already_found:
                     word_coordinates[word[4]] = word[:4]
                     # once word is found, remove it from the list to be found
                     words.remove(word[4])
+                    # now add it to the found list, but this time add the object
+                    # so it is not re-marked again
+                    self._already_found.append(word)
 
             # when found all words bail out
             else:
@@ -86,7 +91,19 @@ class DataLabeller:
 
         return subrectangle
 
-    def _find_rectangles(self, row: dict):
+    def _handle_item_list(self, value):
+        new_value = ''
+        value = ast.literal_eval(value)
+        for il in value:
+            for val in il:
+                if type(val) == int:
+                    val = str(val)
+                new_value += val
+                new_value += ' '
+
+        return new_value
+
+    def _find_rectangles(self, page, row: dict):
         # data = {'full_name': 'tomas costantino'}
         # to_return = {'full_name': (x0,y0,x1,y1),
         #              'date': (x0,y0,x1,y1)}
@@ -94,19 +111,33 @@ class DataLabeller:
         rectangles = {}
 
         for key, value in row.items():
+            # check if it is item list so convert it to list from str
+            if key == 'data':
+                value = self._handle_item_list(value)
+
             words = self._get_words(value)
-            locations = self._find_words(words)
+            locations = self._find_words(page, words)
+
             if locations is not None:
                 rectangles[key] = self._find_subrectangle(locations)
 
-        return rectangles
+        return rectangles if rectangles else None
 
-    def _mark_rectangles(self, rectangles):
-        for page in self._pdf_file.pages():
-            for value in rectangles.values():
-                r = fitz.Rect(value)  # make rect from word bbox
-                page.draw_rect(r, color=[0, 1, 1, 0])  # rectangle
+    def _mark_rectangles(self, page, rectangles):
+        for value in rectangles.values():
+            r = fitz.Rect(value)  # make rect from word bbox
+            page.draw_rect(r, color=[0, 1, 1, 0])  # rectangle
         self._pdf_file.save(self._output_path + '/labelled_' + self._pdf_filename)
+        # once document is finished, clear list
+        self._already_found = []
+
+    def _insert_labels(self, page, rectangle: dict):
+        for key, value in rectangle.items():
+            text_lenght = fitz.get_text_length(key, fontname="Times-Roman", fontsize=10)
+            page.insert_textbox(value, key, fontsize=10,  # choose fontsize (float)
+                               fontname="Times-Roman",  # a PDF standard font
+                               fontfile=None,  # could be a file on your system
+                               align=0)  # 0 = left, 1 = center, 2 = right
 
     def _match_pdfname_to_row(self):
         pdf_name = self._pdf_filename.split('.')[0]
@@ -114,15 +145,17 @@ class DataLabeller:
 
     def _label_document(self):
         row = self._match_pdfname_to_row()
-        rectangles = self._find_rectangles(row)
-        self._mark_rectangles(rectangles)
+        for page in self._pdf_file.pages():
+            rectangles = self._find_rectangles(page, row)
+            self._mark_rectangles(page, rectangles) if rectangles else None
+            # self._insert_labels(page, rectangles)
 
     def _create_csv(self):
         pass
 
     def run(self):
-        self._read_csv(input('Insert full path of csv file: '))
-        self._input_path = input('Insert full path where the PDF documents are: ')
+        self._read_csv('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_1/dt.csv')
+        self._input_path = '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_1/generated_pdf'
 
         # create path for labelled pdfs
         directory_name = self._input_path.split('/')[-1]
