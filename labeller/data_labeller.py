@@ -132,44 +132,39 @@ class DataLabeller:
             values_string += ' '
         return values_string.split(' ')[:-1]  # Don't include the last whitespace at the end
 
-    def _find_cw1(self):
-        pass
-
-    def _find_cw2(self):
-        pass
-
-    def _find_edcw1(self):
-        pass
-
-    def _find_edcw2(self):
-        pass
-
     def _calculate_distance(self, w1, w2):
         return math.sqrt(sum([pow((w1[0] - w2[0]), 2), pow((w1[1] - w2[1]), 2),
                               pow((w1[2] - w2[2]), 2), pow((w1[3] - w2[3]), 2)]))
 
-    def _euclidean_distance(self, target, near_words):
+    def _find_shortest_distances(self, target, context):
         distance_to_target = {}
+        lowest_dist_1 = 100000
+        lowest_dist_2 = 1000000
+        distance_list = [None, None]
 
-        for near_word in near_words:
+        for near_word in context:
             # only pass the coordinates to calculator
-            distance_to_target[near_word] = self._calculate_distance(target[:4], near_word[:4])
+            dist = self._calculate_distance(target[:4], near_word[:4])
+            if dist > 0:
+                if dist < lowest_dist_1:
+                    lowest_dist_1 = dist
+                    distance_list[0] = (near_word, dist)
+                    distance_to_target[target] = distance_list
 
+                elif lowest_dist_1 < dist < lowest_dist_2:
+                    lowest_dist_2 = dist
+                    distance_list[1] = (near_word, dist)
+                    distance_to_target[target] = distance_list
+
+        print(distance_to_target)
         return distance_to_target
 
     def _get_context(self, words):
-        context = {}
+        context = []
         for idx, word in enumerate(words):
-            # check within ranges
-            if idx - 2 >= 0 and idx + 2 <= len(words):
-                sublist = words[idx-2:idx+3]
-                sublist.pop(idx)
-                distances = self._euclidean_distance(word, sublist)
-                values_list = [value for value in distances.values()]
-                nearest_values = sorted(values_list)
-                context[word] = nearest_values[:2]
+            context.append(self._find_shortest_distances(word, words))
 
-            print(context)
+        return context
 
     def _determine_label(self):
         pass
@@ -180,8 +175,8 @@ class DataLabeller:
 
         # get a list of the words on the document
         words_in_file = page.get_text('words')
-        self._get_context(words_in_file)
-
+        context = self._get_context(words_in_file)
+        print(context)
         labelled_words = {}
 
         for word in words_in_file:
