@@ -67,6 +67,9 @@ class DataLabeller:
         '''
         If found anything, it will return a dictionary containing the word as key and the coordinates as value
         example: {'invoice': (x0, y0, x1, y1)}
+        :param page:
+        :param words:
+        :return:
         '''
 
         word_coordinates = {}
@@ -88,6 +91,8 @@ class DataLabeller:
     def _find_subrectangle(self, locations: dict):
         '''
         Find the x0, y0, x1, y1 values where the section desired is present
+        :param locations:
+        :return:
         '''
         x0s = []
         y0s = []
@@ -109,6 +114,8 @@ class DataLabeller:
         '''
         Item lists are a in a nested list [[]] and they are read as a str by the read_csv function
         so convert it to a literal and process the words
+        :param value:
+        :return:
         '''
         new_value = ''
         value = ast.literal_eval(value)
@@ -125,6 +132,11 @@ class DataLabeller:
         return new_value[:-1]  # remove the whitespace from the end
 
     def _get_individual_words(self, row: dict):
+        '''
+        Split the information in the csv rows into individual words as the pdf reader retrieves one by one
+        :param row:
+        :return:
+        '''
         values_string = ''
 
         for value in row.values():
@@ -133,33 +145,62 @@ class DataLabeller:
         return values_string.split(' ')[:-1]  # Don't include the last whitespace at the end
 
     def _calculate_distance(self, w1, w2):
+        '''
+        Calculate euclidean distance between two points
+        :param w1:
+        :param w2:
+        :return:
+        '''
         return math.sqrt(sum([pow((w1[0] - w2[0]), 2), pow((w1[1] - w2[1]), 2),
                               pow((w1[2] - w2[2]), 2), pow((w1[3] - w2[3]), 2)]))
 
     def _find_shortest_distances(self, target, context):
+        '''
+        Given a word, calculate the two closest words with the euclidean distance
+        :param target:
+        :param context:
+        :return:
+        '''
+
         distance_to_target = {}
-        lowest_dist_1 = 100000
-        lowest_dist_2 = 1000000
+        shortest_dist_1 = 100000
+        shortest_dist_2 = 1000000
+
+        '''
+        Look into adding a third closest distance, or using manhattan distance
+        '''
+
         distance_list = [None, None]
 
+        # Loop through all the words in the pdf
         for near_word in context:
             # only pass the coordinates to calculator
             dist = self._calculate_distance(target[:4], near_word[:4])
+            # this avoids including the distance with the word itself
             if dist > 0:
-                if dist < lowest_dist_1:
-                    lowest_dist_1 = dist
+                # now see whether the calculated distance falls between shortest distancess
+                if dist < shortest_dist_1:
+                    distance_list[1] = distance_list[0]
+                    if distance_list[1] is not None:
+                        shortest_dist_2 = distance_list[1][1]
+                    shortest_dist_1 = dist
                     distance_list[0] = (near_word, dist)
+
                     distance_to_target[target] = distance_list
 
-                elif lowest_dist_1 < dist < lowest_dist_2:
-                    lowest_dist_2 = dist
+                elif shortest_dist_1 < dist < shortest_dist_2:
+                    shortest_dist_2 = dist
                     distance_list[1] = (near_word, dist)
                     distance_to_target[target] = distance_list
 
-        print(distance_to_target)
         return distance_to_target
 
     def _get_context(self, words):
+        '''
+        Given a word, get the context, in this case the two shortest distances
+        :param words:
+        :return:
+        '''
         context = []
         for idx, word in enumerate(words):
             context.append(self._find_shortest_distances(word, words))
@@ -176,18 +217,40 @@ class DataLabeller:
         # get a list of the words on the document
         words_in_file = page.get_text('words')
         context = self._get_context(words_in_file)
-        print(context)
+
         labelled_words = {}
 
-        for word in words_in_file:
-            label = 0
-            cw1, edcw1, cw2, edcw2 = 0, 0, 0, 0
-            labelled_words[word[:4]] = {'label': label,
-                                        'word': word[4],
-                                        'cw1': cw1,
-                                        'cw2': cw2,
-                                        'eccw1': edcw1,
-                                        'eccw2': edcw2}
+        for data in context:
+            for key, value in data.items():
+                print(key, value)
+                if key[4] in words_to_label:
+                    if value[0][0][4] in words_to_label or value[1][0][4] in words_to_label:
+                        labelled_words[key[4]] = {'label': 'relevant',
+                                                  'word': key[4],
+                                                  'cw1': value[0][0][4],
+                                                  'edcw1': value[0][1],
+                                                  'cw2': value[1][0][4],
+                                                  'edcw2': value[1][1]
+                                                  }
+                        self._mark_rectangles(page, key[:4], [0, 1, 1, 1])
+                    else:
+                        labelled_words[key[4]] = {'label': 'irrelevant',
+                                                  'word': key[4],
+                                                  'cw1': value[0][0][4],
+                                                  'edcw1': value[0][1],
+                                                  'cw2': value[1][0][4],
+                                                  'edcw2': value[1][1]
+                                                  }
+                        self._mark_rectangles(page, key[:4])
+                else:
+                    labelled_words[key[4]] = {'label': 'irrelevant',
+                                              'word': key[4],
+                                              'cw1': value[0][0][4],
+                                              'edcw1': value[0][1],
+                                              'cw2': value[1][0][4],
+                                              'edcw2': value[1][1]
+                                              }
+                    self._mark_rectangles(page, key[:4])
 
     def _find_rectangles(self, page, row: dict):
         '''
@@ -197,6 +260,9 @@ class DataLabeller:
 
         to_return = {'full_name': (x0,y0,x1,y1),
                      'date': (x0,y0,x1,y1)}
+        :param page:
+        :param row:
+        :return:
         '''
         rectangles = {}
 
@@ -217,10 +283,10 @@ class DataLabeller:
 
         return rectangles if rectangles else None
 
-    def _mark_rectangles(self, page, rectangles):
-        for value in rectangles.values():
-            r = fitz.Rect(value)  # make rect from word bbox
-            page.draw_rect(r, color=[0, 1, 1, 0])  # rectangle
+    def _mark_rectangles(self, page, rectangles, color = [0, 1, 1, 0]):
+        #for value in rectangles.values():
+        #    r = fitz.Rect(value)  # make rect from word bbox
+        page.draw_rect(rectangles, color=color)  # rectangle
         self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
         # once document is finished, clear list
         self._already_found = []
