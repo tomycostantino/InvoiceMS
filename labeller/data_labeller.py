@@ -5,10 +5,18 @@ import os
 import ast
 import math
 import operator
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+import numpy as np
+import bisect
 
 
 class DataLabeller:
     def __init__(self):
+        '''
+        Constructor
+        '''
+
         # this will be the fitz document and will change as we iterate through the directory
         self._current_pdf = ''
 
@@ -29,13 +37,23 @@ class DataLabeller:
         self._rows = []
 
     def _read_csv(self, file):
-        # will get all rows from the csv that contains the data present in the invoices
+        '''
+        will get all rows from the csv that contains the data present in the invoices
+        :param file:
+        :return:
+        '''
+
         with open(file, 'r') as f:
             reader = csv.DictReader(f)
             self._rows = [row for row in reader]
 
     def _open_pdf(self, file):
-        # will be used when one pdf is labelled and the next one comes in.
+        '''
+        will be used when one pdf is labelled and the next one comes in.
+        :param file:
+        :return:
+        '''
+
         self._current_pdf_filename = file
         self._current_pdf = fitz.open(self._pdf_input_path + '/' + file)
 
@@ -43,25 +61,36 @@ class DataLabeller:
     The following four functions are used to calculate the the sub rectangle in which the words are present
     '''
     def _find_x0(self, values):
+        '''
+        :param values:
+        :return:
+        '''
+
         return min(values)
 
     def _find_y0(self, values):
+        '''
+        :param values:
+        :return:
+        '''
+
         return min(values)
 
     def _find_x1(self, values):
+        '''
+        :param values:
+        :return:
+        '''
+
         return max(values)
 
     def _find_y1(self, values):
-        return max(values)
+        '''
+        :param values:
+        :return:
+        '''
 
-    def _split_into_words(self, value: str):
-        '''
-        When getting a value, split it into individual words as Fitz library will analyse pdf word by word
-        '''
-        # get the words one by one and return a list
-        if value.__contains__('-'):
-            value = value.replace('-', '- ')
-        return [v for v in value.split(' ')]
+        return max(values)
 
     def _find_coordinates(self, page, words: typing.List):
         '''
@@ -94,6 +123,7 @@ class DataLabeller:
         :param locations:
         :return:
         '''
+
         x0s = []
         y0s = []
         x1s = []
@@ -117,6 +147,7 @@ class DataLabeller:
         :param value:
         :return:
         '''
+
         new_value = ''
         value = ast.literal_eval(value)
         # for item list in value
@@ -137,6 +168,7 @@ class DataLabeller:
         :param row:
         :return:
         '''
+
         values_string = ''
 
         for value in row.values():
@@ -144,56 +176,40 @@ class DataLabeller:
             values_string += ' '
         return values_string.split(' ')[:-1]  # Don't include the last whitespace at the end
 
-    def _calculate_distance(self, w1, w2):
+    def _calculate_euclidean_distance(self, w1, w2):
         '''
         Calculate euclidean distance between two points
         :param w1:
         :param w2:
         :return:
         '''
+
         return math.sqrt(sum([pow((w1[0] - w2[0]), 2), pow((w1[1] - w2[1]), 2),
                               pow((w1[2] - w2[2]), 2), pow((w1[3] - w2[3]), 2)]))
 
     def _find_shortest_distances(self, target, context):
         '''
-        Given a word, calculate the two closest words with the euclidean distance
+        Given a word, return the two closest words with the euclidean distance
         :param target:
         :param context:
         :return:
         '''
 
-        distance_to_target = {}
-        shortest_dist_1 = 100000
-        shortest_dist_2 = 1000000
-
         '''
         Look into adding a third closest distance, or using manhattan distance
         '''
 
-        distance_list = [None, None]
+        sorted_list = []
 
         # Loop through all the words in the pdf
         for near_word in context:
             # only pass the coordinates to calculator
-            dist = self._calculate_distance(target[:4], near_word[:4])
-            # this avoids including the distance with the word itself
-            if dist > 0:
-                # now see whether the calculated distance falls between shortest distancess
-                if dist < shortest_dist_1:
-                    distance_list[1] = distance_list[0]
-                    if distance_list[1] is not None:
-                        shortest_dist_2 = distance_list[1][1]
-                    shortest_dist_1 = dist
-                    distance_list[0] = (near_word, dist)
+            dist = self._calculate_euclidean_distance(target[:4], near_word[:4])
+            # insert into the list and sort it by the value of the dist
+            bisect.insort(sorted_list, (near_word[:5], dist), key=lambda x: x[1])
 
-                    distance_to_target[target] = distance_list
-
-                elif shortest_dist_1 < dist < shortest_dist_2:
-                    shortest_dist_2 = dist
-                    distance_list[1] = (near_word, dist)
-                    distance_to_target[target] = distance_list
-
-        return distance_to_target
+        # don't include the first element as it will be 0 because of being same word
+        return {target[:5]: sorted_list[1:4]}
 
     def _get_context(self, words):
         '''
@@ -201,6 +217,7 @@ class DataLabeller:
         :param words:
         :return:
         '''
+
         context = []
         for idx, word in enumerate(words):
             context.append(self._find_shortest_distances(word, words))
@@ -211,6 +228,13 @@ class DataLabeller:
         pass
 
     def _label_words(self, page, row: dict):
+        '''
+
+        :param page:
+        :param row:
+        :return:
+        '''
+
         # get a list of the words I want to label
         words_to_label = self._get_individual_words(row)
 
@@ -220,11 +244,13 @@ class DataLabeller:
 
         labelled_words = {}
 
+        # context is a list of dictionaries
         for data in context:
+            # loop through the dictionary
             for key, value in data.items():
                 print(key, value)
                 if key[4] in words_to_label:
-                    if value[0][0][4] in words_to_label or value[1][0][4] in words_to_label:
+                    if value[0][0][4] in words_to_label or value[1][0][4] in words_to_label or value[2][0][4] in words_to_label:
                         labelled_words[key[4]] = {'label': 'relevant',
                                                   'word': key[4],
                                                   'cw1': value[0][0][4],
@@ -264,6 +290,7 @@ class DataLabeller:
         :param row:
         :return:
         '''
+
         rectangles = {}
 
         for key, value in row.items():
@@ -274,7 +301,7 @@ class DataLabeller:
             elif key == 'total':
                 value = '$' + value
 
-            words = self._split_into_words(value)
+            words = self._get_individual_words(row)
             locations = self._find_coordinates(page, words)
 
             # this means that something has been found in the pdf
@@ -284,7 +311,7 @@ class DataLabeller:
         return rectangles if rectangles else None
 
     def _mark_rectangles(self, page, rectangles, color = [0, 1, 1, 0]):
-        #for value in rectangles.values():
+        #for value in rectangles:
         #    r = fitz.Rect(value)  # make rect from word bbox
         page.draw_rect(rectangles, color=color)  # rectangle
         self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
