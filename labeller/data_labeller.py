@@ -4,11 +4,8 @@ import typing
 import os
 import ast
 import math
-import operator
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-import numpy as np
 import bisect
+from invoice_creation.dataset_generator_base import DatasetGeneratorBase
 
 
 class DataLabeller:
@@ -18,7 +15,7 @@ class DataLabeller:
         '''
 
         # this will be the fitz document and will change as we iterate through the directory
-        self._current_pdf = ''
+        self._current_pdf = None
 
         # the filename is kept to write it when outputting labelled doc
         self._current_pdf_filename = ''
@@ -92,7 +89,7 @@ class DataLabeller:
 
         return max(values)
 
-    def _find_coordinates(self, page, words: typing.List):
+    def _find_section_coordinates(self, page, words: typing.List):
         '''
         If found anything, it will return a dictionary containing the word as key and the coordinates as value
         example: {'invoice': (x0, y0, x1, y1)}
@@ -139,6 +136,38 @@ class DataLabeller:
                         self._find_x1(x1s), self._find_y1(y1s))
 
         return subrectangle
+
+    def _find_rectangles(self, page, row: dict):
+        '''
+        This function parses the data label to the sub rectangles where they are present
+
+        data = {'full_name': 'tomas costantino'}
+
+        to_return = {'full_name': (x0,y0,x1,y1),
+                     'date': (x0,y0,x1,y1)}
+        :param page:
+        :param row:
+        :return:
+        '''
+
+        rectangles = {}
+
+        for key, value in row.items():
+            # check if it is item list so convert it to list from str
+            if key == 'data':
+                value = self._handle_item_list(value)
+
+            elif key == 'total':
+                value = '$' + value
+
+            words = self._get_individual_words(row)
+            locations = self._find_section_coordinates(page, words)
+
+            # this means that something has been found in the pdf
+            if locations is not None:
+                rectangles[key] = self._find_subrectangle(locations)
+
+        return rectangles if rectangles else None
 
     def _handle_item_list(self, value):
         '''
@@ -224,8 +253,47 @@ class DataLabeller:
 
         return context
 
-    def _determine_label(self):
-        pass
+    def _determine_label(self, target, words_to_label, words_in_page, context):
+        '''
+        Will determine the label based on word relevance from the csv file
+        :param target:
+        :param csv_field:
+        :param context:
+        :return:
+        '''
+
+        label = {}
+
+        # if the word is irrelevant it will be labelled as such, the method to determine relevance is by
+        # checking whether the word is present in some string in the document
+        if self._is_relevant(target[4], words_to_label):
+
+            for occurrence in self._count_word_occurrences(target, words_in_page):
+                label[occurrence[:5]] = self._label_dict('relevant', target, context[occurrence[:5]])
+
+        else:
+            label[target[:5]] = self._label_dict('irrelevant', target, context[target[:5]])
+
+        return label
+
+    def _label_dict(self, label: str, word, context) -> dict:
+        '''
+        Generates the dict to label a word on the doc
+        :param label:
+        :param word:
+        :param context:
+        :return:
+        '''
+        data = {'label': label,
+                'word': word[4],
+                'position': word[:4]
+                }
+        for i, item in enumerate(context):
+            data[f'near_word_{i+1}_axes'] = item[0][:4]
+            data[f'near_word_{i+1}_word'] = item[0][4]
+            data[f'near_word_{i+1}_dist'] = item[1]
+
+        return data
 
     def _count_word_occurrences(self, target: str, word_list: typing.List) -> typing.List:
         '''
@@ -271,16 +339,15 @@ class DataLabeller:
         :return:
         '''
 
-        relevant = False
         for word in word_list:
             if word.__contains__(target):
-                relevant = True
+                return True
 
-        return relevant
+        return False
 
     def _label_words(self, page, row: dict):
         '''
-
+        will put a label to each individual word
         :param page:
         :param row:
         :return:
@@ -291,61 +358,28 @@ class DataLabeller:
 
         # get a list of the words on the document
         words_in_page = page.get_text('words')
+
+        # get the context of the words, that means the distances between them
         context = self._get_context(words_in_page)
 
-        labels = {}
+        labels = []
 
+        # Loop through all words in document to find the ones to label
         for word in words_in_page:
+            label = self._determine_label(word, words_to_label, words_in_page, context)
+            label[word[:5]]['page_size'] = (page.mediabox_size[:])
+            label[word[:5]]['page_number'] = page.number
+            labels.append(label)
 
-            relevant = self._is_relevant(word[4], words_to_label)
-
-            if relevant:
-                ocs = self._count_word_occurrences(word[4], words_in_page)
-
-                labels[word[:5]] = {'label': 'relevant',
-                                    'word': word,
-                                    'context': context[ocs[0]]}
-
+            # draw rectangle around word
+            if label[word[:5]]['label'] == 'relevant':
                 self._mark_rectangles(page, word[:4], [0, 1, 1, 1])
 
             else:
-                labels[word[:5]] = {'label': 'irrelevant',
-                                    'word': word,
-                                    'context': context[word[:5]]}
                 self._mark_rectangles(page, word[:4])
 
-    def _find_rectangles(self, page, row: dict):
-        '''
-        This function parses the data label to the sub rectangles where they are present
+        return labels
 
-        data = {'full_name': 'tomas costantino'}
-
-        to_return = {'full_name': (x0,y0,x1,y1),
-                     'date': (x0,y0,x1,y1)}
-        :param page:
-        :param row:
-        :return:
-        '''
-
-        rectangles = {}
-
-        for key, value in row.items():
-            # check if it is item list so convert it to list from str
-            if key == 'data':
-                value = self._handle_item_list(value)
-
-            elif key == 'total':
-                value = '$' + value
-
-            words = self._get_individual_words(row)
-            locations = self._find_coordinates(page, words)
-
-            # this means that something has been found in the pdf
-            if locations is not None:
-                rectangles[key] = self._find_subrectangle(locations)
-
-        return rectangles if rectangles else None
-    
     def _mark_rectangles(self, page, rectangles, color = [0, 1, 1, 0]):
         #for value in rectangles:
         #    r = fitz.Rect(value)  # make rect from word bbox
@@ -359,6 +393,13 @@ class DataLabeller:
         self._already_found = []
 
     def _insert_labels(self, page, rectangle: dict):
+        '''
+        Will put the text in the boxes on the document
+        :param page:
+        :param rectangle:
+        :return:
+        '''
+
         for key, value in rectangle.items():
             text_lenght = fitz.get_text_length(key, fontname="Times-Roman", fontsize=10)
             page.insert_textbox(value, key, fontsize=10,  # choose fontsize (float)
@@ -367,21 +408,49 @@ class DataLabeller:
                                align=0)  # 0 = left, 1 = center, 2 = right
 
     def _match_pdfname_to_row(self):
-        # pdf name must be the pdf number so it matches the row
+        '''
+        pdf name must be the pdf number so it matches the row
+        :return:
+        '''
+
         pdf_name = self._current_pdf_filename.split('.')[0]
         return self._rows[int(pdf_name) - 1]
 
     def _label_document(self):
-        row = self._match_pdfname_to_row()
-        for page in self._current_pdf.pages():
-            self._label_words(page, row)
-            rectangles = self._find_rectangles(page, row)
-            self._mark_rectangles(page, rectangles) if rectangles else None
+        '''
+        Will label doc by doc
+        :return:
+        '''
 
-    def _create_csv(self):
-        pass
+        row = self._match_pdfname_to_row()  # if we are reading '80.pdf' then retrieve data from 80th row
+        labels = None
+        for page in self._current_pdf.pages():
+            labels = self._label_words(page, row)
+            self._append_to_csv(labels)
+
+    def _append_to_csv(self, labels):
+        '''
+        Append new rows into csv file
+        :param labels:
+        :return:
+        '''
+
+        ds = DatasetGeneratorBase()
+        fieldnames = list(labels[0].values())
+        fieldnames = list(fieldnames[0].keys()) #get fieldnames
+        filtered_labels = []
+
+        for l in labels:
+            for val in l.values():
+                filtered_labels.append(val)
+        ds.write_csv('data.csv', fieldnames, filtered_labels)
 
     def run(self):
+        '''
+        Run the labelling process
+        :return:
+        '''
+
         self._read_csv('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_1/dt.csv')
         self._pdf_input_path = '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_1/generated_pdf'
 
@@ -393,14 +462,12 @@ class DataLabeller:
         # run through all files in the directory
         for file in os.listdir(self._pdf_input_path):
             if file.endswith('.pdf'):
+
                 # make the class change pdfs as we loop through the directory files
                 self._open_pdf(file)
 
                 # draw rectangles in pdf
                 self._label_document()
-
-        # print out the dataset
-        self._create_csv()
 
 
 def main():
