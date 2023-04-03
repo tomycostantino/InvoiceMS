@@ -187,7 +187,7 @@ class DataLabeller:
         return math.sqrt(sum([pow((w1[0] - w2[0]), 2), pow((w1[1] - w2[1]), 2),
                               pow((w1[2] - w2[2]), 2), pow((w1[3] - w2[3]), 2)]))
 
-    def _find_shortest_distances(self, target, context):
+    def _find_shortest_distances(self, target, context, n):
         '''
         Given a word, return the two closest words with the euclidean distance
         :param target:
@@ -209,7 +209,7 @@ class DataLabeller:
             bisect.insort(sorted_list, (near_word[:5], dist), key=lambda x: x[1])
 
         # don't include the first element as it will be 0 because of being same word
-        return {target[:5]: sorted_list[1:4]}
+        return sorted_list[1:n+1]
 
     def _get_context(self, words):
         '''
@@ -218,14 +218,65 @@ class DataLabeller:
         :return:
         '''
 
-        context = []
+        context = {}
         for idx, word in enumerate(words):
-            context.append(self._find_shortest_distances(word, words))
+            context[word[:5]] = self._find_shortest_distances(word, words, 5)
 
         return context
 
     def _determine_label(self):
         pass
+
+    def _count_word_occurrences(self, target: str, word_list: typing.List) -> typing.List:
+        '''
+        see if there is more than one target word in page
+        :param target:
+        :param word_list:
+        :return:
+        '''
+
+        occurrences = []
+        for word in word_list:
+            if target.__contains__(word[4]):
+                occurrences.append(word[:5])
+
+        return occurrences
+
+    def _manage_multiple_occurrences(self, target_occurrences: typing.List, csv_str: str, context: dict):
+        '''
+        If there is multiple occurrences of one word that is a target, then get the whole column and find the other
+        relevant words' coordinates and find the target occurrence with the shortest distance
+        :param target_occurrences:
+        :param csv_str:
+        :param word_list:
+        :return:
+        '''
+
+        relevances = {}
+
+        for key, value in context.items():
+            if key in target_occurrences:
+                for i in value:
+                    if csv_str.find(i[0]) != -1:
+                        relevances[key] = i
+
+        return relevances
+
+    def _is_relevant(self, target: str, word_list):
+        '''
+        If a word in the csv is present in the document then it is relevant so return true
+        This will be later filtered out to see which one is the most relevant if there is multiple occurrences
+        :param target:
+        :param word_list:
+        :return:
+        '''
+
+        relevant = False
+        for word in word_list:
+            if word.__contains__(target):
+                relevant = True
+
+        return relevant
 
     def _label_words(self, page, row: dict):
         '''
@@ -239,44 +290,29 @@ class DataLabeller:
         words_to_label = self._get_individual_words(row)
 
         # get a list of the words on the document
-        words_in_file = page.get_text('words')
-        context = self._get_context(words_in_file)
+        words_in_page = page.get_text('words')
+        context = self._get_context(words_in_page)
 
-        labelled_words = {}
+        labels = {}
 
-        # context is a list of dictionaries
-        for data in context:
-            # loop through the dictionary
-            for key, value in data.items():
-                print(key, value)
-                if key[4] in words_to_label:
-                    if value[0][0][4] in words_to_label or value[1][0][4] in words_to_label or value[2][0][4] in words_to_label:
-                        labelled_words[key[4]] = {'label': 'relevant',
-                                                  'word': key[4],
-                                                  'cw1': value[0][0][4],
-                                                  'edcw1': value[0][1],
-                                                  'cw2': value[1][0][4],
-                                                  'edcw2': value[1][1]
-                                                  }
-                        self._mark_rectangles(page, key[:4], [0, 1, 1, 1])
-                    else:
-                        labelled_words[key[4]] = {'label': 'irrelevant',
-                                                  'word': key[4],
-                                                  'cw1': value[0][0][4],
-                                                  'edcw1': value[0][1],
-                                                  'cw2': value[1][0][4],
-                                                  'edcw2': value[1][1]
-                                                  }
-                        self._mark_rectangles(page, key[:4])
-                else:
-                    labelled_words[key[4]] = {'label': 'irrelevant',
-                                              'word': key[4],
-                                              'cw1': value[0][0][4],
-                                              'edcw1': value[0][1],
-                                              'cw2': value[1][0][4],
-                                              'edcw2': value[1][1]
-                                              }
-                    self._mark_rectangles(page, key[:4])
+        for word in words_in_page:
+
+            relevant = self._is_relevant(word[4], words_to_label)
+
+            if relevant:
+                ocs = self._count_word_occurrences(word[4], words_in_page)
+
+                labels[word[:5]] = {'label': 'relevant',
+                                    'word': word,
+                                    'context': context[ocs[0]]}
+
+                self._mark_rectangles(page, word[:4], [0, 1, 1, 1])
+
+            else:
+                labels[word[:5]] = {'label': 'irrelevant',
+                                    'word': word,
+                                    'context': context[word[:5]]}
+                self._mark_rectangles(page, word[:4])
 
     def _find_rectangles(self, page, row: dict):
         '''
@@ -309,12 +345,16 @@ class DataLabeller:
                 rectangles[key] = self._find_subrectangle(locations)
 
         return rectangles if rectangles else None
-
+    
     def _mark_rectangles(self, page, rectangles, color = [0, 1, 1, 0]):
         #for value in rectangles:
         #    r = fitz.Rect(value)  # make rect from word bbox
-        page.draw_rect(rectangles, color=color)  # rectangle
-        self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
+        try:
+            page.draw_rect(rectangles, color=color)  # rectangle
+            self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
+
+        except:
+            print('couldnt print')
         # once document is finished, clear list
         self._already_found = []
 
