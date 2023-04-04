@@ -5,7 +5,7 @@ import os
 import ast
 import math
 import bisect
-from invoice_creation.dataset_generator_base import DatasetGeneratorBase
+from dataset_generator.dataset_generator_base import DatasetGeneratorBase
 
 
 class DataLabeller:
@@ -198,12 +198,14 @@ class DataLabeller:
         :return:
         '''
 
+
         values_string = ''
 
         for value in row.values():
             values_string += value
             values_string += ' '
         return values_string.split(' ')[:-1]  # Don't include the last whitespace at the end
+
 
     def _calculate_euclidean_distance(self, w1, w2):
         '''
@@ -284,14 +286,15 @@ class DataLabeller:
         :param context:
         :return:
         '''
+
         data = {'label': label,
                 'word': word[4],
-                'position': word[:4]
+                'position': (round(word[0], 2), round(word[1], 2), round(word[2], 2), round(word[3], 2))
                 }
         for i, item in enumerate(context):
-            data[f'near_word_{i+1}_axes'] = item[0][:4]
-            data[f'near_word_{i+1}_word'] = item[0][4]
-            data[f'near_word_{i+1}_dist'] = item[1]
+            data[f'near_word_{i + 1}_word'] = item[0][4]
+            data[f'near_word_{i+1}_axes'] = (round(item[0][0], 2), round(item[0][1], 2), round(item[0][2], 2), round(item[0][3], 2))
+            data[f'near_word_{i+1}_dist'] = float(round(item[1], 2))
 
         return data
 
@@ -443,7 +446,7 @@ class DataLabeller:
         for l in labels:
             for val in l.values():
                 filtered_labels.append(val)
-        ds.write_csv('data.csv', fieldnames, filtered_labels)
+        ds.write_csv('../datasets/dataset.csv', fieldnames, filtered_labels)
 
     def run(self):
         '''
