@@ -6,9 +6,9 @@ class DatasetGeneratorBase:
     def __init__(self):
         pass
 
-    def write_csv(self, file, fieldnames, rows):
+    def write_csv(self, file, fieldnames, rows, mode):
         # write invoices to CSV file
-        with open(file, 'w', newline='') as csvfile:
+        with open(file, mode, newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for row in rows:

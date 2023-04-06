@@ -1,7 +1,6 @@
 import random
-import csv
 from faker import Faker
-from invoice_creation.dataset_generator_base import DatasetGeneratorBase
+from dataset_generator.dataset_generator_base import DatasetGeneratorBase
 
 fake = Faker()
 
@@ -61,4 +60,4 @@ if __name__ == '__main__':
     # generate invoices
     gen = DatasetGeneratorTemplate1()
     rows = gen.create_dataset(200)
-    gen.write_csv(input('File output name without csv: ') + '.csv', rows[0].keys(), rows)
+    gen.write_csv(input('File output name without csv: ') + '.csv', rows[0].keys(), rows, 'w')
