@@ -6,6 +6,7 @@ import ast
 import math
 import bisect
 import re
+import jellyfish
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
 from dataset_generator.dataset_generator_base import DatasetGeneratorBase
@@ -42,7 +43,7 @@ class DataLabeller:
         self._rows = []
 
         # all words from pdf file retrieved with Fitz library
-        self._words_in_file = []
+        self._words_in_file = {}
 
         self._context = {}
 
@@ -56,6 +57,7 @@ class DataLabeller:
         with open(file, 'r') as f:
             reader = csv.DictReader(f)
             self._rows = [row for row in reader]
+            f.close()
 
     def _read_pdf(self, file):
         '''
@@ -76,10 +78,11 @@ class DataLabeller:
         :return:
         '''
 
-        self._words_in_file = []
+        self._words_in_file = {}
 
         for page in self._current_pdf.pages():
-            self._words_in_file += page.get_text('words')
+            for word in page.get_text('words'):
+                self._words_in_file[word[:5]] = page
 
     def _get_pdf_words_context(self):
         '''
@@ -90,8 +93,8 @@ class DataLabeller:
 
         self._context = {}
 
-        for idx, word in enumerate(self._words_in_file):
-            self._context[word[:5]] = self._find_shortest_distances(word, 5)
+        for word in self._words_in_file.keys():
+            self._context[word] = self._find_shortest_distances(word, 5)
 
     def _handle_item_list(self, value):
         '''
@@ -156,11 +159,11 @@ class DataLabeller:
         sorted_list = []
 
         # Loop through all the words in the pdf
-        for near_word in self._words_in_file:
+        for near_word in self._words_in_file.keys():
             # only pass the coordinates to calculator
             dist = self._calculate_euclidean_distance(target[:4], near_word[:4])
             # insert into the list and sort it by the value of the dist
-            bisect.insort(sorted_list, (near_word[:5], dist), key=lambda x: x[1])
+            bisect.insort(sorted_list, (near_word, dist), key=lambda x: x[1])
 
         # don't include the first element as it will be 0 because of being same word
         return sorted_list[1:n+1]
@@ -196,7 +199,7 @@ class DataLabeller:
         target_pattern = re.compile('-|\\s+|\n'.join(re.escape(part) for part in target.split('-')))
 
         occurrences = []
-        for word in self._words_in_file:
+        for word in self._words_in_file.keys():
             if target_pattern.match(word[4]):
                 occurrences.append(word[:5])
 
@@ -215,7 +218,7 @@ class DataLabeller:
         :return: a tuple of the form (start_index, end_index)
         """
         index = -1
-        for i, word in enumerate(self._words_in_file):
+        for i, word in enumerate(self._words_in_file.keys()):
             if word[4] == occurrence[4]:
                 index = i
                 break
@@ -224,7 +227,7 @@ class DataLabeller:
             raise ValueError(f"Occurrence not found in self._words_in_file: {occurrence}")
 
         context_start = max(0, index - 5)
-        context_end = min(len(self._words_in_file), index + 6)
+        context_end = min(len(self._words_in_file.keys()), index + 6)
         return context_start, context_end
 
     def _calculate_context_similarity(self, context_string, csv_fields):
@@ -257,7 +260,7 @@ class DataLabeller:
 
         for occurrence in occurrences:
             context_start, context_end = self._get_context_indices(occurrence)
-            context_words = self._words_in_file[context_start:context_end]
+            context_words = list(self._words_in_file.keys())[context_start:context_end]
             context_string = ' '.join(word[4] for word in context_words)
 
             similarity = self._calculate_context_similarity(context_string, csv_fields)
@@ -268,7 +271,11 @@ class DataLabeller:
 
         return most_relevant_occurrence
 
-    def _is_relevant(self, target: str, word_list):
+    def _is_string_similar(self, word1, word2, threshold=0.4):
+        similarity = jellyfish.jaro_winkler(word1, word2)
+        return similarity >= threshold
+
+    def _is_relevant(self, target: str, word_list, threshold = 0.8, dist_scale_factor=0.01):
         '''
         If a word in the csv is present in the document then it is relevant so return true
         This will be later filtered out to see which one is the most relevant if there is multiple occurrences
@@ -277,12 +284,30 @@ class DataLabeller:
         :return:
         '''
 
-        for word in word_list:
-            if word == target:
+        def split_by_separators(word):
+            separators = ['-', '_', '.', ',', ' ']
+            pattern = '|'.join(map(re.escape, separators))
+            return re.split(pattern, word)
+
+        def is_target_relevant(target, word, threshold):
+            # Check the similarity of the full strings (including separators)
+            if target == word or self._is_string_similar(target, word, threshold):
                 return True
 
-            # Check if the target is a substring at the beginning or end of the word
-            if word.startswith(target) or word.endswith(target):
+            # Split the target and the word by separators and check the similarity of the parts
+            target_parts = split_by_separators(target)
+            word_parts = split_by_separators(word)
+
+            if len(target_parts) == len(word_parts):
+                for t_part, w_part in zip(target_parts, word_parts):
+                    if not (t_part == w_part or self._is_string_similar(t_part, w_part, threshold)):
+                        return False
+                return True
+
+            return False
+
+        for word in word_list:
+            if is_target_relevant(target, word, threshold):
                 return True
 
         return False
@@ -302,44 +327,42 @@ class DataLabeller:
         label_rows = []
 
         # Loop through all words in document to find the ones to label
-        for word in self._words_in_file:
-            labelled_word = {}
+        for word in self._words_in_file.keys():
             # if the word in the pdf matches the one in the csv then it is relevant
             if self._is_relevant(word[4], individual_words_to_label):
                 # if there is more than one occurence, it must be dealt with
                 n_occurrences = self._count_word_occurrences(word[4])
 
                 # if it is there only one time then it is relevant and just be labelled as such
-                if len(n_occurrences) > 0:
+                if len(n_occurrences) == 1:
                     labelled_word = self._build_label_dict('relevant', word)
+                    self._draw_rectangle(word, [0, 1, 1, 1])
 
                 else:
                     ''' Gotta keep working on this'''
                     relevant_occurrence = self._manage_multiple_occurrences(n_occurrences, csv_fields)
                     labelled_word = self._build_label_dict('relevant' if word == relevant_occurrence else 'irrelevant', word)
+                    self._draw_rectangle(word, [0, 1, 1, 1]) if word == relevant_occurrence else self._draw_rectangle(word)
 
             else:
                 labelled_word = self._build_label_dict('irrelevant', word)
-
-            if labelled_word['label'] == 'relevant':
-                self._mark_rectangles(word[:4], [0, 1, 1, 1])
-            else:
-                self._mark_rectangles(word[:4])
+                self._draw_rectangle(word)
 
             label_rows.append(labelled_word)
 
+        self._current_pdf.close()
+
         return label_rows
 
-    def _mark_rectangles(self, rectangles, color = [0, 1, 1, 0]):
-        for page in self._current_pdf.pages():
-            try:
-                page.draw_rect(rectangles, color=color)  # rectangle
-                self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
+    def _draw_rectangle(self, word, color = [0, 1, 1, 0]):
+        try:
+            self._words_in_file[word].draw_rect(word[:4], color)
+            self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
 
-            except ValueError:
+        except ValueError:
                 print('couldnt print')
         # once document is finished, clear list
-        # self._already_found = []
+        self._already_found = []
 
     def _match_pdfname_to_row(self):
         '''
