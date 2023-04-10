@@ -4,7 +4,7 @@ from docxtpl import DocxTemplate, RichText, InlineImage
 import os
 
 # Read the CSV file and load the data
-with open('random_data.csv', 'r', newline='') as csvfile:
+with open('data.csv', 'r', newline='') as csvfile:
     csv_reader = csv.DictReader(csvfile)
     rows = [row for row in csv_reader]
 

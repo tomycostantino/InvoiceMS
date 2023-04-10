@@ -40,10 +40,10 @@ def generate_random_row():
 
 
 # Generate 100 rows of random data
-rows = [generate_random_row() for _ in range(100)]
+rows = [generate_random_row() for _ in range(200)]
 
 # Write the random data to a CSV file
-with open('random_data.csv', 'w', newline='') as csvfile:
+with open('data.csv', 'w', newline='') as csvfile:
     fieldnames = [
         "ABN", "issuer", "issuer_address", "billing_address", "invoice_n",
         "date", "date_period", "reference_n", "billed_to",

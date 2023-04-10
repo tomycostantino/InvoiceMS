@@ -26,10 +26,10 @@ class TemplateFiller:
 
         for i, row in enumerate(rows):
             # the data column is the list of items, and usually comes as a str
-            if row['data'] is str:
+            if type(row['data']) == str:
                 row['data'] = ast.literal_eval(row['data'])
 
             template.render(row)
-            template.save(f"generated_docx/invoice_{i + 1}.docx")
+            template.save(f"generated_docx/{i + 1}.docx")
 
 
