@@ -16,7 +16,7 @@ class DatasetTemplate2(DatasetGeneratorBase):
         for i in range(length):
             data = [
                 [
-                    fake.date_between(start_date='-30y', end_date='today').strftime('%d/%m/%Y'),
+                    fake.date_between(start_date='-3y', end_date='today').strftime('%d/%m/%Y'),
                     # Change the date format to "dd/mm/yyyy"
                     fake.bs(),
                     round(fake.random.uniform(1, 500), 2),

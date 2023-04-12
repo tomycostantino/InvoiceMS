@@ -401,8 +401,8 @@ class DataLabeller:
         :return:
         '''
 
-        self._read_csv('/invoice_creation/invoice_template_2/data.csv')
-        self._pdf_input_path = '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_2/generated_pdf'
+        self._read_csv('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_4/data.csv')
+        self._pdf_input_path = '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_4/generated_pdf'
 
         # create path for labelled pdfs
         directory_name = self._pdf_input_path.split('/')[-1]
