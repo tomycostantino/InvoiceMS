@@ -5,7 +5,7 @@ from dataset_generator.dataset_generator_base import DatasetGeneratorBase
 fake = Faker()
 
 
-class DatasetGeneratorTemplate1(DatasetGeneratorBase):
+class DatasetTemplate1(DatasetGeneratorBase):
     def __init__(self):
         super().__init__()
 
@@ -36,7 +36,7 @@ class DatasetGeneratorTemplate1(DatasetGeneratorBase):
             total = sum([float(row[3][1:]) for row in data])  # convert amount string to float and sum
 
             # create invoice dictionary
-            invoice = {
+            row = {
                 "issuer": issuer,
                 "issuer_address": issuer_address,
                 "phone": phone,
@@ -51,13 +51,13 @@ class DatasetGeneratorTemplate1(DatasetGeneratorBase):
                 "support_email": f"support@reallygreatsite.com"
             }
 
-            rows.append(invoice)
+            rows.append(row)
 
         return rows
 
 
 if __name__ == '__main__':
     # generate invoices
-    gen = DatasetGeneratorTemplate1()
-    rows = gen.create_dataset(200)
-    gen.write_csv(input('File output name without csv: ') + '.csv', rows[0].keys(), rows, 'w')
+    dataset_gen = DatasetTemplate1()
+    rows = dataset_gen.create_dataset(200)
+    dataset_gen.write_csv(input('File output name without csv extension: ') + '.csv', rows[0].keys(), rows, 'w')
