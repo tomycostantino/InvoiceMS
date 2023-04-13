@@ -43,9 +43,9 @@ class DataLabeller:
         self._rows = []
 
         # all words from pdf file retrieved with Fitz library
-        self._words_in_file = {}
+        self._words_in_file = []
 
-        self._context = {}
+        self._context = []
 
     def _read_csv(self, file):
         '''
@@ -78,11 +78,17 @@ class DataLabeller:
         :return:
         '''
 
-        self._words_in_file = {}
+        self._words_in_file = []
 
         for page in self._current_pdf.pages():
             for word in page.get_text('words'):
-                self._words_in_file[word[:5]] = page
+                self._words_in_file.append(
+                    {
+                        'word': word[4],
+                        'coordinates': word[:4],
+                        'page': page
+                    }
+                )
 
     def _get_pdf_words_context(self):
         '''
@@ -91,10 +97,20 @@ class DataLabeller:
         :return:
         '''
 
-        self._context = {}
+        self._context = []
 
-        for word in self._words_in_file.keys():
-            self._context[word] = self._find_shortest_distances(word, 5)
+        for word in self._words_in_file:
+            near_words = []
+            for distance in self._find_shortest_distances(word, 3):
+                near_words.append({
+                    'word': distance[0]['word'],
+                    'coordinates': distance[0]['coordinates'],
+                    'distance': distance[1]
+                })
+            self._context.append({
+                'word': word['word'],
+                'near_words': near_words
+            })
 
     def _handle_item_list(self, value):
         '''
@@ -159,9 +175,9 @@ class DataLabeller:
         sorted_list = []
 
         # Loop through all the words in the pdf
-        for near_word in self._words_in_file.keys():
+        for near_word in self._words_in_file:
             # only pass the coordinates to calculator
-            dist = self._calculate_euclidean_distance(target[:4], near_word[:4])
+            dist = self._calculate_euclidean_distance(target['coordinates'], near_word['coordinates'])
             # insert into the list and sort it by the value of the dist
             bisect.insort(sorted_list, (near_word, dist), key=lambda x: x[1])
 
@@ -177,15 +193,22 @@ class DataLabeller:
         '''
 
         data = {'label': label,
-                'word': word[4],
-                'position': (round(word[0], 2), round(word[1], 2), round(word[2], 2), round(word[3], 2))
+                'word': word['word'],
+                'coordinates': word['coordinates']
                 }
-        for i, item in enumerate(self._context[word[:5]]):
-            data[f'near_word_{i + 1}_word'] = item[0][4]
-            data[f'near_word_{i+1}_axes'] = (round(item[0][0], 2), round(item[0][1], 2), round(item[0][2], 2), round(item[0][3], 2))
-            data[f'near_word_{i+1}_dist'] = float(round(item[1], 2))
 
-        return data
+        for item in self._context:
+            if item['word'] == word['word']:
+                for i, near_word in enumerate(item['near_words']):
+                    data[f'near_word_{i + 1}_word'] = near_word['word']
+                    data[f'near_word_{i+1}_axes'] = (round(near_word['coordinates'][0], 2),
+                                                     round(near_word['coordinates'][1], 2),
+                                                     round(near_word['coordinates'][2], 2),
+                                                     round(near_word['coordinates'][3], 2))
+
+                    data[f'near_word_{i+1}_dist'] = float(round(item['near_words'][i]['distance'], 2))
+
+                return data
 
     def _count_word_occurrences(self, target: str) -> typing.List:
         '''
@@ -199,9 +222,9 @@ class DataLabeller:
         target_pattern = re.compile('-|\\s+|\n'.join(re.escape(part) for part in target.split('-')))
 
         occurrences = []
-        for word in self._words_in_file.keys():
-            if target_pattern.match(word[4]):
-                occurrences.append(word[:5])
+        for word in self._words_in_file:
+            if target_pattern.match(word['word']):
+                occurrences.append(word)
 
         return occurrences
 
@@ -218,8 +241,8 @@ class DataLabeller:
         :return: a tuple of the form (start_index, end_index)
         """
         index = -1
-        for i, word in enumerate(self._words_in_file.keys()):
-            if word[4] == occurrence[4]:
+        for i, word in enumerate(self._words_in_file):
+            if word['word'] == occurrence['word']:
                 index = i
                 break
 
@@ -227,7 +250,7 @@ class DataLabeller:
             raise ValueError(f"Occurrence not found in self._words_in_file: {occurrence}")
 
         context_start = max(0, index - 5)
-        context_end = min(len(self._words_in_file.keys()), index + 6)
+        context_end = min(len(self._words_in_file), index + 6)
         return context_start, context_end
 
     def _calculate_context_similarity(self, context_string, csv_fields):
@@ -260,7 +283,7 @@ class DataLabeller:
 
         for occurrence in occurrences:
             context_start, context_end = self._get_context_indices(occurrence)
-            context_words = list(self._words_in_file.keys())[context_start:context_end]
+            context_words = self._words_in_file[context_start:context_end]
             context_string = ' '.join(word[4] for word in context_words)
 
             similarity = self._calculate_context_similarity(context_string, csv_fields)
@@ -327,14 +350,14 @@ class DataLabeller:
         label_rows = []
 
         # Loop through all words in document to find the ones to label
-        for word in self._words_in_file.keys():
+        for word in self._words_in_file:
             # if the word in the pdf matches the one in the csv then it is relevant
-            if self._is_relevant(word[4], individual_words_to_label):
+            if self._is_relevant(word['word'], individual_words_to_label):
                 # if there is more than one occurence, it must be dealt with
-                n_occurrences = self._count_word_occurrences(word[4])
+                n_occurrences = self._count_word_occurrences(word['word'])
 
                 # if it is there only one time then it is relevant and just be labelled as such
-                if len(n_occurrences) == 1:
+                if len(n_occurrences) > 0:
                     labelled_word = self._build_label_dict('relevant', word)
                     self._draw_rectangle(word, [0, 1, 1, 1])
 
@@ -356,7 +379,7 @@ class DataLabeller:
 
     def _draw_rectangle(self, word, color = [0, 1, 1, 0]):
         try:
-            self._words_in_file[word].draw_rect(word[:4], color)
+            word['page'].draw_rect(word['coordinates'], color)
             self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
 
         except ValueError:
