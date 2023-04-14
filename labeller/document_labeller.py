@@ -7,6 +7,7 @@ import math
 import bisect
 import re
 import jellyfish
+from data_preprocessing import DataPreProcessing
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
 from dataset_generator.dataset_generator_base import DatasetGeneratorBase
@@ -45,7 +46,10 @@ class DataLabeller:
         # all words from pdf file retrieved with Fitz library
         self._words_in_file = []
 
+        # context words
         self._context = []
+
+        self._pre_processor = DataPreProcessing
 
     def _read_csv(self, file):
         '''
@@ -59,6 +63,9 @@ class DataLabeller:
             self._rows = [row for row in reader]
             f.close()
 
+        data = self._pre_processor.preprocess_csv_data(self._rows)
+        print(data)
+
     def _read_pdf(self, file):
         '''
         will be used when one pdf is labelled and the next one comes in.
@@ -71,6 +78,9 @@ class DataLabeller:
 
         self._get_words_from_pdf()
         self._get_pdf_words_context()
+
+        data = self._pre_processor.preprocess_pdf_data(self._words_in_file)
+        print(data)
 
     def _get_words_from_pdf(self):
         '''
