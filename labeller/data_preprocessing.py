@@ -6,12 +6,21 @@ class DataPreProcessing:
 
     @staticmethod
     def preprocess_pdf_word(word: str) -> str:
+        '''
+        :param word:
+        :return:
+        '''
         word = word.lower()
         word = re.sub(r'\W+', '', word)
         return word
 
     @staticmethod
     def preprocess_pdf_data(words_in_file: List[Dict]) -> List[Dict]:
+        '''
+
+        :param words_in_file:
+        :return:
+        '''
         preprocessed_data = []
         for word_data in words_in_file:
             preprocessed_word = DataPreProcessing.preprocess_pdf_word(word_data['word'])
@@ -24,6 +33,11 @@ class DataPreProcessing:
 
     @staticmethod
     def preprocess_csv_data(rows: List[Dict]) -> List[Dict]:
+        '''
+
+        :param rows:
+        :return:
+        '''
         preprocessed_data = []
         for row in rows:
             preprocessed_row = {}

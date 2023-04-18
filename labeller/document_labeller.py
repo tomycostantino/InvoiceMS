@@ -63,8 +63,7 @@ class DataLabeller:
             self._rows = [row for row in reader]
             f.close()
 
-        data = self._pre_processor.preprocess_csv_data(self._rows)
-        print(data)
+        self._rows = self._pre_processor.preprocess_csv_data(self._rows)
 
     def _read_pdf(self, file):
         '''
@@ -79,8 +78,7 @@ class DataLabeller:
         self._get_words_from_pdf()
         self._get_pdf_words_context()
 
-        data = self._pre_processor.preprocess_pdf_data(self._words_in_file)
-        print(data)
+        self._words_in_file = self._pre_processor.preprocess_pdf_data(self._words_in_file)
 
     def _get_words_from_pdf(self):
         '''
@@ -339,13 +337,13 @@ class DataLabeller:
 
             return False
 
-        for word in word_list:
-            if is_target_relevant(target, word, threshold):
+        for value in list(word_list.values()):
+            if target in value:
                 return True
 
         return False
 
-    def _label_words(self, row: dict):
+    def _label_words(self, row_n: int):
         '''
         will put a label to each individual word
         :param page:
@@ -354,15 +352,15 @@ class DataLabeller:
         '''
 
         # get a list of the words I want to label
-        individual_words_to_label = self._split_csv_values_into_words(row)
-        csv_fields = [str(val) for val in row.values()]
+        # individual_words_to_label = self._split_csv_values_into_words(row)
+        # csv_fields = [str(val) for val in row.values()]
 
         label_rows = []
 
         # Loop through all words in document to find the ones to label
         for word in self._words_in_file:
             # if the word in the pdf matches the one in the csv then it is relevant
-            if self._is_relevant(word['word'], individual_words_to_label):
+            if self._is_relevant(word['word'], self._rows[row_n]):
                 # if there is more than one occurence, it must be dealt with
                 n_occurrences = self._count_word_occurrences(word['word'])
 
@@ -404,7 +402,7 @@ class DataLabeller:
         '''
 
         pdf_name = self._current_pdf_filename.split('.')[0]
-        return self._rows[int(pdf_name) - 1]
+        return int(pdf_name) - 1
 
     def _label_document(self):
         '''
@@ -413,8 +411,8 @@ class DataLabeller:
         '''
 
         row = self._match_pdfname_to_row()  # if we are reading '80.pdf' then retrieve data from 80th row
-        labels = self._label_words(row)
-        self._append_to_csv(labels)
+        self._label_words(row)
+        # self._append_to_csv(labels)
 
     def _append_to_csv(self, labels):
         '''
