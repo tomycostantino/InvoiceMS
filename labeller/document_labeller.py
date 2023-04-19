@@ -5,12 +5,10 @@ import os
 import ast
 import math
 import bisect
-import re
 import jellyfish
 from data_preprocessing import DataPreProcessing
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.feature_extraction.text import CountVectorizer
 from dataset_generator.dataset_generator_base import DatasetGeneratorBase
+import time
 
 
 class DataLabeller:
@@ -35,10 +33,6 @@ class DataLabeller:
 
         # directory path to store labelled documents
         self._pdf_output_path = ''
-
-        # the class can open multiple documents, when analysing one, store the object that were already found
-        # so they are not marked again
-        self._already_found = []
 
         # rows from csv file
         self._rows = []
@@ -107,9 +101,9 @@ class DataLabeller:
 
         self._context = []
 
-        for word in self._words_in_file:
+        for idx, word in enumerate(self._words_in_file):
             near_words = []
-            for distance in self._find_shortest_distances(word, 3):
+            for distance in self._find_shortest_distances(idx, word, 3):
                 near_words.append({
                     'word': distance[0]['word'],
                     'coordinates': distance[0]['coordinates'],
@@ -152,7 +146,12 @@ class DataLabeller:
         values_string = ' '.join(str(value) for value in row.values())
         return values_string.strip().split()
 
-    def _calculate_euclidean_distance(self, w1, w2):
+    def _calculate_center(self, coord):
+        x_center = (coord[0] + coord[2]) / 2
+        y_center = (coord[1] + coord[3]) / 2
+        return x_center, y_center
+
+    def _calculate_euclidean_distance(self, coord1, coord2):
         '''
         Calculate euclidean distance between two points
         :param w1:
@@ -160,20 +159,17 @@ class DataLabeller:
         :return:
         '''
 
-        return math.sqrt(sum([pow((w1[0] - w2[0]), 2), pow((w1[1] - w2[1]), 2),
-                              pow((w1[2] - w2[2]), 2), pow((w1[3] - w2[3]), 2)]))
+        center1 = self._calculate_center(coord1)
+        center2 = self._calculate_center(coord2)
 
-    def _calculate_center(self, coord):
-        x_center = (coord[0] + coord[2]) / 2
-        y_center = (coord[1] + coord[3]) / 2
-        return x_center, y_center
+        return math.sqrt((center1[0] - center2[0]) ** 2 + (center1[1] - center2[1]) ** 2)
 
     def _calculate_manhattan_distance(self, coord1, coord2):
         center1 = self._calculate_center(coord1)
         center2 = self._calculate_center(coord2)
         return abs(center1[0] - center2[0]) + abs(center1[1] - center2[1])
 
-    def _find_shortest_distances(self, target, n):
+    def _find_shortest_distances(self, idx, target, n):
         '''
         Given a word, return the two closest words with the euclidean distance
         :param target:
@@ -182,8 +178,12 @@ class DataLabeller:
 
         sorted_list = []
 
+        # Not going to loop through all words again so calculate the range between 5 and 10 words
+        context_start = max(0, idx - 5)
+        context_end = min(len(self._words_in_file), idx + 6)
+
         # Loop through all the words in the pdf
-        for near_word in self._words_in_file:
+        for near_word in self._words_in_file[context_start:context_end]:
             # only pass the coordinates to calculator
             dist = self._calculate_euclidean_distance(target['coordinates'], near_word['coordinates'])
             # insert into the list and sort it by the value of the dist
@@ -225,57 +225,9 @@ class DataLabeller:
         :return:
         '''
 
-        # Create a regex pattern for the target word, allowing any number of spaces,
-        # hyphens, or line breaks between the parts
-        target_pattern = re.compile('-|\\s+|\n'.join(re.escape(part) for part in target.split('-')))
-
         occurrences = []
-        for word in self._words_in_file:
-            if target == word['word']:
-                occurrences.append(word)
-
+        [occurrences.append(word) for word in self._words_in_file if word.get('word') == target]
         return occurrences
-
-    def _get_cosine_similarity(self, text1, text2):
-        documents = [text1, text2]
-        count_vectorizer = CountVectorizer().fit_transform(documents)
-        vectors = count_vectorizer.toarray()
-        return cosine_similarity(vectors)[0][1]
-
-    def _get_context_indices(self, occurrence):
-        """
-        Given an occurrence, find the indices of the context words in self._words_in_file.
-        :param occurrence: the occurrence for which the context is to be found
-        :return: a tuple of the form (start_index, end_index)
-        """
-        index = -1
-        for i, word in enumerate(self._words_in_file):
-            if word['word'] == occurrence['word']:
-                index = i
-                break
-
-        if index == -1:
-            raise ValueError(f"Occurrence not found in self._words_in_file: {occurrence}")
-
-        context_start = max(0, index - 5)
-        context_end = min(len(self._words_in_file), index + 6)
-        return context_start, context_end
-
-    def _calculate_context_similarity(self, context_string, csv_fields):
-        """
-        Calculate the similarity between the context string and the csv fields using Jaccard similarity.
-        :param context_string: the context string
-        :param csv_fields: the list of csv field values
-        :return: the Jaccard similarity between the context string and the csv fields
-        """
-        context_set = set(context_string.lower().split())
-        csv_fields_set = set(' '.join(csv_fields).lower().split())
-
-        intersection = len(context_set.intersection(csv_fields_set))
-        union = len(context_set.union(csv_fields_set))
-
-        similarity = intersection / union if union > 0 else 0
-        return similarity
 
     def _occurrences_in_csv(self, target, csv_fields):
         '''
@@ -286,14 +238,15 @@ class DataLabeller:
         '''
         occurrences = []
 
-        for o in list(csv_fields.values()):
-            if target in o:
-                occurrences.append(o)
+        for occurrence in list(csv_fields.values()):
+            for word in occurrence:
+                if word == target:
+                    occurrences.append(word)
 
         # if the word is only one time in the csv just return the word dict and not a list with the dicts inside
         return occurrences
 
-    def _calculate_rectangle_center(self, rectangles):
+    def _find_csv_rectangle(self, rectangles):
         '''
         Calculate the center of the csv field in the pdf and the target word occurrence
         :param rectangles:
@@ -307,34 +260,21 @@ class DataLabeller:
             max_x = max(max_x, x1)
             max_y = max(max_y, y1)
 
-        center_x = (min_x + max_x) / 2
-        center_y = (min_y + max_y) / 2
-        return (center_x, center_y)
+        return min_x, min_y, max_x, max_y
 
-    def _most_relevant_occurrence(self, rect_center, occurrences):
+    def _determine_most_relevant_occurrence(self, full_csv_field_in_pdf, occurrences):
         '''
         Determine the most relevant occurrence by returning the shortest word to a certain rectangle
         :return:
         '''
 
-        def calculate_distance(p1, p2):
-            '''
-            Same euclidean distance as the general one but this one calculates between two axis
-            not four
-            :param p1:
-            :param p2:
-            :return:
-            '''
+        closest_distance = float('inf')  # will be compared against to find the actually closest_distance
+        closest_occurrence = None        # will be the object of the word that is closest to the csv field
 
-            return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
-
-        closest_distance = float('inf')
-        closest_occurrence = None
-
+        # loop through all occurrences and measure their distance in respect to the whole csv located in the field
         for occurrence in occurrences:
-            occurrence_center = self._calculate_rectangle_center([occurrence['coordinates']])
-            occurrence_distance = calculate_distance(rect_center, occurrence_center)
-            if closest_distance > occurrence_distance:
+            occurrence_distance = self._calculate_euclidean_distance(full_csv_field_in_pdf, occurrence['coordinates'])
+            if occurrence_distance < closest_distance:
                 closest_distance = occurrence_distance
                 closest_occurrence = occurrence
 
@@ -349,7 +289,7 @@ class DataLabeller:
         :return:
         '''
 
-        # Count how many times the word that is relevant is repeated in the csv
+        # Count how many times the text of word that is relevant is repeated in the csv
         word_occurrences_in_csv = self._occurrences_in_csv(occurrences[0]['word'], csv_fields)
 
         # This list will store words that are in the pdf and belong to a certain csv field
@@ -359,6 +299,7 @@ class DataLabeller:
         # the most relevant occurrence by measuring the distance between the target and the center of the csv field in
         # the pdf
         if len(word_occurrences_in_csv) == 1:
+
             # Loop through the words in file to find the ones that belong to a certain csv field
             for word in self._words_in_file:
                 # if the text of the word is in the csv and is not one of the target word, then append that word's
@@ -366,20 +307,19 @@ class DataLabeller:
                 if word['word'] in word_occurrences_in_csv[0] and word['word'] != occurrences[0]['word']:
                     full_csv_field_in_pdf.append(word['coordinates'])
 
+            csv_in_pdf_rectangle = self._find_csv_rectangle(full_csv_field_in_pdf)
             # once we found the csv field in the pdf, calculate the center which will be measured against
-            # all relevant occurrences to find the closest one
-            csv_field_in_pdf_center = self._calculate_rectangle_center(full_csv_field_in_pdf)
-
-            return self._most_relevant_occurrence(csv_field_in_pdf_center, occurrences)
+            # all relevant occurrences to find the closest one and assign it as relevant
+            return [self._determine_most_relevant_occurrence(csv_in_pdf_rectangle, occurrences)]
 
         else:
-            return occurrences[0]
+            return occurrences
 
     def _is_string_similar(self, word1, word2, threshold=0.4):
         similarity = jellyfish.jaro_winkler(word1, word2)
         return similarity >= threshold
 
-    def _is_relevant(self, target: str, word_list, threshold = 0.8, dist_scale_factor=0.01):
+    def _is_relevant(self, target: str, word_list):
         '''
         If a word in the csv is present in the document then it is relevant so return true
         This will be later filtered out to see which one is the most relevant if there is multiple occurrences
@@ -387,28 +327,6 @@ class DataLabeller:
         :param word_list:
         :return:
         '''
-
-        def split_by_separators(word):
-            separators = ['-', '_', '.', ',', ' ']
-            pattern = '|'.join(map(re.escape, separators))
-            return re.split(pattern, word)
-
-        def is_target_relevant(target, word, threshold):
-            # Check the similarity of the full strings (including separators)
-            if target == word or self._is_string_similar(target, word, threshold):
-                return True
-
-            # Split the target and the word by separators and check the similarity of the parts
-            target_parts = split_by_separators(target)
-            word_parts = split_by_separators(word)
-
-            if len(target_parts) == len(word_parts):
-                for t_part, w_part in zip(target_parts, word_parts):
-                    if not (t_part == w_part or self._is_string_similar(t_part, w_part, threshold)):
-                        return False
-                return True
-
-            return False
 
         for value in list(word_list.values()):
             if target in value:
@@ -443,10 +361,9 @@ class DataLabeller:
                     self._draw_rectangle(word, [0, 1, 1, 1])
 
                 else:
-                    ''' Gotta keep working on this'''
-                    relevant_occurrence = self._manage_multiple_occurrences(occurrences, self._rows[row_n])
-                    labelled_word = self._build_label_dict('relevant' if word == relevant_occurrence else 'irrelevant', word)
-                    self._draw_rectangle(word, [0, 1, 1, 1]) if word == relevant_occurrence else self._draw_rectangle(word)
+                    relevant_occurrences = self._manage_multiple_occurrences(occurrences, self._rows[row_n])
+                    labelled_word = self._build_label_dict('relevant' if word in relevant_occurrences else 'irrelevant', word)
+                    self._draw_rectangle(word, [0, 1, 1, 1]) if word in relevant_occurrences else self._draw_rectangle(word)
 
             else:
                 labelled_word = self._build_label_dict('irrelevant', word)
@@ -466,7 +383,6 @@ class DataLabeller:
         except ValueError:
                 print('couldnt print')
         # once document is finished, clear list
-        self._already_found = []
 
     def _match_pdfname_to_row(self):
         '''
@@ -496,7 +412,6 @@ class DataLabeller:
 
         ds = DatasetGeneratorBase()
         fieldnames = list(labels[0].keys())
-        # fieldnames = list(fieldnames[0].keys())  # get fieldnames
         ds.write_csv('../datasets/dataset.csv', fieldnames, labels, 'a')
 
     def run(self):
@@ -505,8 +420,8 @@ class DataLabeller:
         :return:
         '''
 
-        self._read_csv('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_4/data.csv')
-        self._pdf_input_path = '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_4/generated_pdf'
+        self._read_csv('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_2/data.csv')
+        self._pdf_input_path = '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_2/generated_pdf'
 
         # create path for labelled pdfs
         directory_name = self._pdf_input_path.split('/')[-1]
@@ -516,12 +431,17 @@ class DataLabeller:
         # run through all files in the directory
         for file in os.listdir(self._pdf_input_path):
             if file.endswith('.pdf'):
+                start_time = time.time()
 
                 # make the class change pdfs as we loop through the directory files
                 self._read_pdf(file)
 
                 # do the labelling
                 self._label_document()
+
+                end_time = time.time()
+
+                print(f'Time taken to label {file} was {round(end_time - start_time, 5)} seconds')
 
 
 def main():
