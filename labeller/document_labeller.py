@@ -231,7 +231,7 @@ class DataLabeller:
 
         occurrences = []
         for word in self._words_in_file:
-            if target_pattern.match(word['word']):
+            if target == word['word']:
                 occurrences.append(word)
 
         return occurrences
@@ -277,6 +277,69 @@ class DataLabeller:
         similarity = intersection / union if union > 0 else 0
         return similarity
 
+    def _occurrences_in_csv(self, target, csv_fields):
+        '''
+        Count how many times a target word is repeated across the csv fields
+        :param target:
+        :param csv_fields:
+        :return:
+        '''
+        occurrences = []
+
+        for o in list(csv_fields.values()):
+            if target in o:
+                occurrences.append(o)
+
+        # if the word is only one time in the csv just return the word dict and not a list with the dicts inside
+        return occurrences
+
+    def _calculate_rectangle_center(self, rectangles):
+        '''
+        Calculate the center of the csv field in the pdf and the target word occurrence
+        :param rectangles:
+        :return:
+        '''
+        min_x, min_y, max_x, max_y = float('inf'), float('inf'), float('-inf'), float('-inf')
+
+        for x0, y0, x1, y1 in rectangles:
+            min_x = min(min_x, x0)
+            min_y = min(min_y, y0)
+            max_x = max(max_x, x1)
+            max_y = max(max_y, y1)
+
+        center_x = (min_x + max_x) / 2
+        center_y = (min_y + max_y) / 2
+        return (center_x, center_y)
+
+    def _most_relevant_occurrence(self, rect_center, occurrences):
+        '''
+        Determine the most relevant occurrence by returning the shortest word to a certain rectangle
+        :return:
+        '''
+
+        def calculate_distance(p1, p2):
+            '''
+            Same euclidean distance as the general one but this one calculates between two axis
+            not four
+            :param p1:
+            :param p2:
+            :return:
+            '''
+
+            return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
+        closest_distance = float('inf')
+        closest_occurrence = None
+
+        for occurrence in occurrences:
+            occurrence_center = self._calculate_rectangle_center([occurrence['coordinates']])
+            occurrence_distance = calculate_distance(rect_center, occurrence_center)
+            if closest_distance > occurrence_distance:
+                closest_distance = occurrence_distance
+                closest_occurrence = occurrence
+
+        return closest_occurrence
+
     def _manage_multiple_occurrences(self, occurrences: typing.List, csv_fields):
         '''
         If there is multiple occurrences of one word that is a target, then get the whole column and find the other
@@ -286,21 +349,31 @@ class DataLabeller:
         :return:
         '''
 
-        highest_similarity = -1
-        most_relevant_occurrence = None
+        # Count how many times the word that is relevant is repeated in the csv
+        word_occurrences_in_csv = self._occurrences_in_csv(occurrences[0]['word'], csv_fields)
 
-        for occurrence in occurrences:
-            context_start, context_end = self._get_context_indices(occurrence)
-            context_words = self._words_in_file[context_start:context_end]
-            context_string = ' '.join(word[4] for word in context_words)
+        # This list will store words that are in the pdf and belong to a certain csv field
+        full_csv_field_in_pdf = []
 
-            similarity = self._calculate_context_similarity(context_string, csv_fields)
+        # If we only have a target word to label in all csv columns, but it is repeated across the pdf, find
+        # the most relevant occurrence by measuring the distance between the target and the center of the csv field in
+        # the pdf
+        if len(word_occurrences_in_csv) == 1:
+            # Loop through the words in file to find the ones that belong to a certain csv field
+            for word in self._words_in_file:
+                # if the text of the word is in the csv and is not one of the target word, then append that word's
+                # coordinates to create the rectangle of the full csv field in the pdf doc
+                if word['word'] in word_occurrences_in_csv[0] and word['word'] != occurrences[0]['word']:
+                    full_csv_field_in_pdf.append(word['coordinates'])
 
-            if similarity > highest_similarity:
-                highest_similarity = similarity
-                most_relevant_occurrence = occurrence
+            # once we found the csv field in the pdf, calculate the center which will be measured against
+            # all relevant occurrences to find the closest one
+            csv_field_in_pdf_center = self._calculate_rectangle_center(full_csv_field_in_pdf)
 
-        return most_relevant_occurrence
+            return self._most_relevant_occurrence(csv_field_in_pdf_center, occurrences)
+
+        else:
+            return occurrences[0]
 
     def _is_string_similar(self, word1, word2, threshold=0.4):
         similarity = jellyfish.jaro_winkler(word1, word2)
@@ -362,16 +435,16 @@ class DataLabeller:
             # if the word in the pdf matches the one in the csv then it is relevant
             if self._is_relevant(word['word'], self._rows[row_n]):
                 # if there is more than one occurence, it must be dealt with
-                n_occurrences = self._count_word_occurrences(word['word'])
+                occurrences = self._count_word_occurrences(word['word'])
 
                 # if it is there only one time then it is relevant and just be labelled as such
-                if len(n_occurrences) > 0:
+                if len(occurrences) == 1:
                     labelled_word = self._build_label_dict('relevant', word)
                     self._draw_rectangle(word, [0, 1, 1, 1])
 
                 else:
                     ''' Gotta keep working on this'''
-                    relevant_occurrence = self._manage_multiple_occurrences(n_occurrences, csv_fields)
+                    relevant_occurrence = self._manage_multiple_occurrences(occurrences, self._rows[row_n])
                     labelled_word = self._build_label_dict('relevant' if word == relevant_occurrence else 'irrelevant', word)
                     self._draw_rectangle(word, [0, 1, 1, 1]) if word == relevant_occurrence else self._draw_rectangle(word)
 

@@ -34,10 +34,10 @@ class DataPreProcessing:
     @staticmethod
     def preprocess_csv_data(rows: List[Dict]) -> List[Dict]:
         '''
-
         :param rows:
         :return:
         '''
+
         preprocessed_data = []
         for row in rows:
             preprocessed_row = {}
