@@ -18,26 +18,26 @@ class DatasetTemplate3(DatasetGeneratorBase):
 
         for i in range(length):
 
-            product_rows = random.randint(1, 10)
+            product_rows = random.randint(1, 5)
             product_data = []
             subtotal = 0
             for _ in range(product_rows):
                 description = fake.bs()
                 rate = round(random.uniform(10, 500), 2)
                 qty = random.randint(1, 10)
-                total = rate * qty
+                total = round(rate * qty, 2)
                 subtotal += total
                 product_data.append([description, rate, qty, total])
 
             tax_rate = random.uniform(0.05, 0.2)
             tax = round(subtotal * tax_rate, 2)
-            total = subtotal + tax
+            total = round(subtotal + tax, 2)
 
             row = {
                 "issuer": fake.company(),
                 "issuer_address": fake.address(),
                 "issuer_number": fake.phone_number(),
-                "business_code": ' '.join([str(random.randint(10 ** 8, 10 ** 9 - 1)) for _ in range(3)]),
+                "business_code": str(random.randint(1111111, 9999999)),
                 "invoice_n": random.randint(1, 99999),
                 "date": fake.date_between(start_date='-5y', end_date='today'),
                 "billed_to": fake.name(),
@@ -57,4 +57,4 @@ class DatasetTemplate3(DatasetGeneratorBase):
 if __name__ == '__main__':
     dataset_gen = DatasetTemplate3()
     rows = dataset_gen.create_dataset(200)
-    dataset_gen.write_csv(input('File output name without csv extension: ') + '.csv', rows[0].keys(), rows, 'w')
+    dataset_gen.write_csv(input('File output filename without csv extension: ') + '.csv', rows[0].keys(), rows, 'w')

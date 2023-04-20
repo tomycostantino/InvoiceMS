@@ -52,4 +52,4 @@ class DatasetTemplate2(DatasetGeneratorBase):
 if __name__ == '__main__':
     dataset_gen = DatasetTemplate2()
     rows = dataset_gen.create_dataset(200)
-    dataset_gen.write_csv(input('File output name without csv extension: ') + '.csv', rows[0].keys(), rows, 'w')
+    dataset_gen.write_csv(input('File output filename without csv extension: ') + '.csv', rows[0].keys(), rows, 'w')
