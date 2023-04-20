@@ -8,6 +8,9 @@ from base_model import BaseModel
 
 class LogisticRegressionModel(BaseModel):
     def __init__(self):
+        '''
+        Init parent class and create pipeline
+        '''
         super().__init__()
         self.pipeline = Pipeline([
             ('tfidf', TfidfVectorizer()),
@@ -15,11 +18,22 @@ class LogisticRegressionModel(BaseModel):
         ])
 
     def train(self, X_train, y_train):
-        X_train_preprocessed = self.preprocess(X_train)
+        '''
+        Fit data into model
+        :param X_train:
+        :param y_train:
+        :return:
+        '''
+        X_train_preprocessed = self.preprocess_data(X_train)
         self.pipeline.fit(X_train_preprocessed, y_train)
 
     def predict(self, X_test):
-        X_test_preprocessed = self.preprocess(X_test)
+        '''
+        Make predictions in data
+        :param X_test:
+        :return:
+        '''
+        X_test_preprocessed = self.preprocess_data(X_test)
         return self.pipeline.predict(X_test_preprocessed)
 
 
@@ -47,6 +61,3 @@ if __name__ == '__main__':
 
     # Evaluate the model
     model.evaluate(y_test, y_pred)
-
-    model.save_model('lr')
-
