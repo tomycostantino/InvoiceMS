@@ -190,9 +190,9 @@ class DataLabeller:
             bisect.insort(sorted_list, (near_word, dist), key=lambda x: x[1])
 
         # don't include the first element as it will be 0 because of being same word
-        return sorted_list[1:n+1]
+        return sorted_list[1:n + 1]
 
-    def _build_label_dict(self, label: str, word) -> dict:
+    def _build_label_dict(self, label: str, word) -> typing.Union[dict, None]:
         '''
         Generates the dict to label a word on the doc
         :param label:
@@ -200,23 +200,15 @@ class DataLabeller:
         :return:
         '''
 
+        if word['word'] == '':
+            return None
+
         data = {'label': label,
                 'word': word['word'],
                 'coordinates': word['coordinates']
                 }
 
-        for item in self._context:
-            if item['word'] == word['word']:
-                for i, near_word in enumerate(item['near_words']):
-                    data[f'near_word_{i + 1}_word'] = near_word['word']
-                    data[f'near_word_{i+1}_axes'] = (round(near_word['coordinates'][0], 2),
-                                                     round(near_word['coordinates'][1], 2),
-                                                     round(near_word['coordinates'][2], 2),
-                                                     round(near_word['coordinates'][3], 2))
-
-                    data[f'near_word_{i+1}_dist'] = float(round(item['near_words'][i]['distance'], 2))
-
-                return data
+        return data
 
     def _count_word_occurrences(self, target: str) -> typing.List:
         '''
@@ -269,7 +261,7 @@ class DataLabeller:
         '''
 
         closest_distance = float('inf')  # will be compared against to find the actually closest_distance
-        closest_occurrence = None        # will be the object of the word that is closest to the csv field
+        closest_occurrence = None  # will be the object of the word that is closest to the csv field
 
         # loop through all occurrences and measure their distance in respect to the whole csv located in the field
         for occurrence in occurrences:
@@ -315,10 +307,6 @@ class DataLabeller:
         else:
             return occurrences
 
-    def _is_string_similar(self, word1, word2, threshold=0.4):
-        similarity = jellyfish.jaro_winkler(word1, word2)
-        return similarity >= threshold
-
     def _is_relevant(self, target: str, word_list):
         '''
         If a word in the csv is present in the document then it is relevant so return true
@@ -334,7 +322,7 @@ class DataLabeller:
 
         return False
 
-    def _label_words(self, row_n: int):
+    def _label_pdf_words(self, row_n: int):
         '''
         will put a label to each individual word
         :param page:
@@ -362,31 +350,36 @@ class DataLabeller:
 
                 else:
                     relevant_occurrences = self._manage_multiple_occurrences(occurrences, self._rows[row_n])
-                    labelled_word = self._build_label_dict('relevant' if word in relevant_occurrences else 'irrelevant', word)
-                    self._draw_rectangle(word, [0, 1, 1, 1]) if word in relevant_occurrences else self._draw_rectangle(word)
+                    labelled_word = self._build_label_dict('relevant' if word in relevant_occurrences else \
+                                                           'irrelevant', word)
+                    self._draw_rectangle(word, [0, 1, 1, 1]) if word in relevant_occurrences else self._draw_rectangle(
+                        word)
 
             else:
                 labelled_word = self._build_label_dict('irrelevant', word)
                 self._draw_rectangle(word)
 
-            label_rows.append(labelled_word)
+            if labelled_word is not None:
+                label_rows.append(labelled_word)
+            else:
+                continue
 
         self._current_pdf.close()
 
         return label_rows
 
-    def _draw_rectangle(self, word, color = [0, 1, 1, 0]):
+    def _draw_rectangle(self, word, color=[0, 1, 1, 0]):
         try:
             word['page'].draw_rect(word['coordinates'], color)
             self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
 
         except ValueError:
-                print('couldnt print')
+            print('couldnt print')
         # once document is finished, clear list
 
     def _match_pdfname_to_row(self):
         '''
-        pdf name must be the pdf number so it matches the row
+        pdf filename must be the pdf number so it matches the row
         :return:
         '''
 
@@ -399,55 +392,75 @@ class DataLabeller:
         :return:
         '''
 
-        row = self._match_pdfname_to_row()  # if we are reading '80.pdf' then retrieve data from 80th row
-        self._label_words(row)
-        # self._append_to_csv(labels)
+        row = self._match_pdfname_to_row()  # if we are reading '80.pdf', then retrieve data from 80th row
+        return self._label_pdf_words(row)
 
-    def _append_to_csv(self, labels):
+    def _build_dataset(self, filename, labels):
         '''
-        Append new rows into csv file
+        Create csv file with all documents labels
         :param labels:
         :return:
         '''
 
-        ds = DatasetGeneratorBase()
-        fieldnames = list(labels[0].keys())
-        ds.write_csv('../datasets/dataset.csv', fieldnames, labels, 'a')
+        with open(filename, mode='w', newline='') as file:
+            fieldnames = ['label', 'word', 'coordinates']
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
 
-    def run(self):
+            for pdf_label_list in labels:
+                for data_dict in pdf_label_list:
+                    writer.writerow(data_dict)
+
+        print(f"Data has been successfully written to {filename}")
+
+    def run(self, invoices_folder):
         '''
-        Run the labelling process
+        Run the labelling process on each folder of invoice template
         :return:
         '''
 
-        self._read_csv('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_2/data.csv')
-        self._pdf_input_path = '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoice_creation/invoice_template_2/generated_pdf'
+        for folder in os.listdir(invoices_folder):
+            if folder.startswith('invoice'):
 
-        # create path for labelled pdfs
-        directory_name = self._pdf_input_path.split('/')[-1]
-        self._pdf_output_path = self._pdf_input_path.replace(directory_name, 'labelled_pdf')
-        os.makedirs(self._pdf_output_path, exist_ok=True)
+                print(f'Labelling {folder} folder')
 
-        # run through all files in the directory
-        for file in os.listdir(self._pdf_input_path):
-            if file.endswith('.pdf'):
-                start_time = time.time()
+                # Read data to label pdfs
+                self._read_csv(f'{invoices_folder}/{folder}/data.csv')
+                self._pdf_input_path = f'{invoices_folder}/{folder}/generated_pdf'
 
-                # make the class change pdfs as we loop through the directory files
-                self._read_pdf(file)
+                # create path for labelled pdfs
+                directory_name = self._pdf_input_path.split('/')[-1]
+                self._pdf_output_path = self._pdf_input_path.replace(directory_name, 'labelled_pdf')
+                os.makedirs(self._pdf_output_path, exist_ok=True)
 
-                # do the labelling
-                self._label_document()
+                # find path of invoice template number
+                csv_output = self._pdf_input_path.split('/')[-2]
 
-                end_time = time.time()
+                dataset = []
 
-                print(f'Time taken to label {file} was {round(end_time - start_time, 5)} seconds')
+                # run through all files in the directory
+                for file in os.listdir(self._pdf_input_path):
+                    if file.endswith('.pdf'):
+
+                        # start clock to calculate time taken per document
+                        start_time = time.time()
+
+                        # make the class change pdfs as we loop through the directory files
+                        self._read_pdf(file)
+
+                        # go through the labelling pipeline
+                        dataset.append(self._label_document())
+
+                        # stop clock and print out time taken
+                        end_time = time.time()
+                        print(f'Time taken to label {file} was {round(end_time - start_time, 5)} seconds')
+
+                self._build_dataset(f'../datasets/{csv_output}.csv', dataset)
 
 
 def main():
-
     lab = DataLabeller()
-    lab.run()
+    lab.run('../invoices')
 
 
 if __name__ == '__main__':
