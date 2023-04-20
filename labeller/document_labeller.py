@@ -418,9 +418,13 @@ class DataLabeller:
         Run the labelling process on each folder of invoice template
         :return:
         '''
+        already_labelled_folder = []
+        for already_existing_dataset in os.listdir('../datasets'):
+            if already_existing_dataset.startswith('invoice'):
+                already_labelled_folder.append(already_existing_dataset.split('.')[0])
 
         for folder in os.listdir(invoices_folder):
-            if folder.startswith('invoice'):
+            if folder.startswith('invoice') and folder not in already_labelled_folder:
 
                 print(f'Labelling {folder} folder')
 
@@ -456,6 +460,9 @@ class DataLabeller:
                         print(f'Time taken to label {file} was {round(end_time - start_time, 5)} seconds')
 
                 self._build_dataset(f'../datasets/{csv_output}.csv', dataset)
+
+            else:
+                print(f'{folder} already labelled')
 
 
 def main():
