@@ -2,6 +2,7 @@ import os
 import joblib
 import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.model_selection import train_test_split
 
 
 class BaseModel:
@@ -31,9 +32,23 @@ class BaseModel:
         # open datasets and concatenate into one
         data_frames = [pd.read_csv(file) for file in csv_files]
         data = pd.concat(data_frames, ignore_index=True)
-
+        print("Merged data:")
+        print(data.head())
         # Shuffle the data and return
         return data.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    def create_train_test_dataset(self, csv_folder, test_size=0.2):
+        '''
+        Will merge datasets and return it split to train models
+        :param csv_folder:
+        :param test_size:
+        :return:
+        '''
+        df = self.preprocess_data(self.load_and_merge_datasets(csv_folder))
+        X = self.preprocess_data(df)
+        y = df["label"]
+        return train_test_split(X, y, test_size=test_size, random_state=42)
+
 
     def preprocess_data(self, df):
         '''

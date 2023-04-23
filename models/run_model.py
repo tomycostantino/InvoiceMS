@@ -44,6 +44,6 @@ class RunModel:
 
 
 if __name__ == '__main__':
-    lr = RunModel('lr')
-    results = lr.classify_pdf('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoices/invoice_template_1/generated_pdf/100.pdf')
+    lr = RunModel('random_forest')
+    results = lr.classify_pdf('/Users/tomasc/PycharmProjects/IMS/invoices_templates/PDF/12.pdf')
     print(results.to_string())
