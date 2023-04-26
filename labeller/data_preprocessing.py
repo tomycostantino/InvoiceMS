@@ -23,12 +23,11 @@ class DataPreProcessing:
         '''
         preprocessed_data = []
         for word_data in words_in_file:
-            preprocessed_word = DataPreProcessing.preprocess_pdf_word(word_data['word'])
-            preprocessed_data.append({
-                'word': preprocessed_word,
-                'coordinates': word_data['coordinates'],
-                'page': word_data['page']
-            })
+            for key, value in word_data.items():
+                # just preprocess the word strings, not all other values
+                if key.__contains__('word'):
+                    word_data[key] = DataPreProcessing.preprocess_pdf_word(value)
+            preprocessed_data.append(word_data)
         return preprocessed_data
 
     @staticmethod

@@ -40,9 +40,6 @@ class DataLabeller:
         # all words from pdf file retrieved with Fitz library
         self._words_in_file = []
 
-        # context words
-        self._context = []
-
         self._pre_processor = DataPreProcessing
 
     def _read_csv(self, file):
@@ -51,13 +48,16 @@ class DataLabeller:
         :param file:
         :return:
         '''
+        try:
+            with open(file, 'r') as f:
+                reader = csv.DictReader(f)
+                self._rows = [row for row in reader]
+                f.close()
 
-        with open(file, 'r') as f:
-            reader = csv.DictReader(f)
-            self._rows = [row for row in reader]
-            f.close()
+            self._rows = self._pre_processor.preprocess_csv_data(self._rows)
 
-        self._rows = self._pre_processor.preprocess_csv_data(self._rows)
+        except Exception as e:
+            print(e)
 
     def _read_pdf(self, file):
         '''
@@ -83,14 +83,14 @@ class DataLabeller:
         self._words_in_file = []
 
         for page in self._current_pdf.pages():
-            for word in page.get_text('words'):
-                self._words_in_file.append(
-                    {
+            for idx, word in enumerate(page.get_text('words')):
+                w = {
                         'word': word[4],
                         'coordinates': word[:4],
                         'page': page
                     }
-                )
+
+                self._words_in_file.append(w)
 
     def _get_pdf_words_context(self):
         '''
@@ -99,20 +99,11 @@ class DataLabeller:
         :return:
         '''
 
-        self._context = []
-
         for idx, word in enumerate(self._words_in_file):
-            near_words = []
-            for distance in self._find_shortest_distances(idx, word, 3):
-                near_words.append({
-                    'word': distance[0]['word'],
-                    'coordinates': distance[0]['coordinates'],
-                    'distance': distance[1]
-                })
-            self._context.append({
-                'word': word['word'],
-                'near_words': near_words
-            })
+            for i, distance in enumerate(self._find_shortest_distances(idx, word, 3)):
+                self._words_in_file[idx][f'near_word_{i}'] = distance[0]['word']
+                self._words_in_file[idx][f'near_w_{i}_coord'] = distance[0]['coordinates']
+                self._words_in_file[idx][f'distance_w_{i}'] = distance[1]
 
     def _handle_item_list(self, value):
         '''
@@ -165,6 +156,12 @@ class DataLabeller:
         return math.sqrt((center1[0] - center2[0]) ** 2 + (center1[1] - center2[1]) ** 2)
 
     def _calculate_manhattan_distance(self, coord1, coord2):
+        '''
+        Manhattan distance between two words in document
+        :param coord1:
+        :param coord2:
+        :return:
+        '''
         center1 = self._calculate_center(coord1)
         center2 = self._calculate_center(coord2)
         return abs(center1[0] - center2[0]) + abs(center1[1] - center2[1])
@@ -203,10 +200,8 @@ class DataLabeller:
         if word['word'] == '':
             return None
 
-        data = {'label': label,
-                'word': word['word'],
-                'coordinates': word['coordinates']
-                }
+        data = word
+        data['label'] = label
 
         return data
 
@@ -403,12 +398,25 @@ class DataLabeller:
         '''
 
         with open(filename, mode='w', newline='') as file:
-            fieldnames = ['label', 'word', 'coordinates']
+            fieldnames = None
+
+            # make the fieldnames, thing is to remove the page object because it will make the code crash
+            # just need to go through one of them that is the break for
+            for pdf_label_list in labels:
+                for data_dict in pdf_label_list:
+                    fieldnames = list(data_dict.keys())
+                    fieldnames.remove('page')
+                    break
+                break
+
+            # now write header
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
 
+            # write all fields now
             for pdf_label_list in labels:
                 for data_dict in pdf_label_list:
+                    data_dict.pop('page')
                     writer.writerow(data_dict)
 
         print(f"Data has been successfully written to {filename}")
@@ -418,6 +426,8 @@ class DataLabeller:
         Run the labelling process on each folder of invoice template
         :return:
         '''
+
+        # check if folder has already been labelled
         already_labelled_folder = []
         for already_existing_dataset in os.listdir('../datasets'):
             if already_existing_dataset.startswith('invoice'):
