@@ -9,6 +9,30 @@ import jellyfish
 from data_preprocessing import DataPreProcessing
 from dataset_generator.dataset_generator_base import DatasetGeneratorBase
 import time
+from threading import Thread
+
+RECTANGLE_COLOR = {
+    'issuer': [1, 0, 0, 0],             # red
+    'issuer_address': [0, 1, 0, 0],     # green
+    'issuer_phone': [0, 0, 1, 0],       # blue
+    'invoice_n': [1, 1, 0, 0],          # yellow
+    'date': [0, 1, 1, 0],               # cyan
+    'billed_to': [1, 0, 1, 0],          # magenta
+    'billing_address': [1, 0.5, 0, 0],  # orange
+    'total': [0.5, 0, 0.5, 0],          # purple
+    'data': [1, 0.71, 0.76, 0],         # pink
+    'irrelevant': [0, 0, 0, 0],         # black
+}
+
+GENERAL_LABELS = ['issuer',
+                  'issuer_address',
+                  'issuer_phone',
+                  'invoice_n',
+                  'date',
+                  'billed_to',
+                  'billing_address',
+                  'total',
+                  'data']
 
 
 class DataLabeller:
@@ -70,7 +94,7 @@ class DataLabeller:
         self._current_pdf = fitz.open(self._pdf_input_path + '/' + file)
 
         self._get_words_from_pdf()
-        self._get_pdf_words_context()
+        # self._get_pdf_words_context()
 
         self._words_in_file = self._pre_processor.preprocess_pdf_data(self._words_in_file)
 
@@ -189,7 +213,10 @@ class DataLabeller:
         # don't include the first element as it will be 0 because of being same word
         return sorted_list[1:n + 1]
 
-    def _build_label_dict(self, label: str, word) -> typing.Union[dict, None]:
+    def _determine_label(self, row):
+        pass
+
+    def _build_label_dict(self, row_n: int, word) -> typing.Union[dict, None]:
         '''
         Generates the dict to label a word on the doc
         :param label:
@@ -197,11 +224,19 @@ class DataLabeller:
         :return:
         '''
 
+        # if str is empty then do not create any label
         if word['word'] == '':
             return None
 
+        label = ''
+        for key, value in self._rows[row_n].items():
+            if key not in GENERAL_LABELS:
+                pass
+            elif word['word'] in value:
+                label = key
+
         data = word
-        data['label'] = label
+        data['label'] = label if label != '' else 'irrelevant'
 
         return data
 
@@ -340,18 +375,22 @@ class DataLabeller:
 
                 # if it is there only one time then it is relevant and just be labelled as such
                 if len(occurrences) == 1:
-                    labelled_word = self._build_label_dict('relevant', word)
-                    self._draw_rectangle(word, [0, 1, 1, 1])
+                    labelled_word = self._build_label_dict(row_n, word)
+                    self._draw_rectangle(word)
 
                 else:
                     relevant_occurrences = self._manage_multiple_occurrences(occurrences, self._rows[row_n])
-                    labelled_word = self._build_label_dict('relevant' if word in relevant_occurrences else \
-                                                           'irrelevant', word)
-                    self._draw_rectangle(word, [0, 1, 1, 1]) if word in relevant_occurrences else self._draw_rectangle(
+                    if word in relevant_occurrences:
+                        labelled_word = self._build_label_dict(row_n, word)
+                    else:
+                        labelled_word = word
+                        labelled_word['label'] = 'irrelevant'
+
+                    self._draw_rectangle(word) if word in relevant_occurrences else self._draw_rectangle(
                         word)
 
             else:
-                labelled_word = self._build_label_dict('irrelevant', word)
+                labelled_word = self._build_label_dict(row_n, word)
                 self._draw_rectangle(word)
 
             if labelled_word is not None:
@@ -363,9 +402,12 @@ class DataLabeller:
 
         return label_rows
 
-    def _draw_rectangle(self, word, color=[0, 1, 1, 0]):
+    def _draw_rectangle(self, word):
         try:
-            word['page'].draw_rect(word['coordinates'], color)
+            if 'label' not in word:
+                return
+            color = RECTANGLE_COLOR[word['label']]
+            word['page'].draw_rect(word['coordinates'], color=color)
             self._current_pdf.save(self._pdf_output_path + '/labelled_' + self._current_pdf_filename)
 
         except ValueError:
