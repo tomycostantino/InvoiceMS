@@ -12,16 +12,16 @@ import time
 from threading import Thread
 
 RECTANGLE_COLOR = {
-    'issuer': [1, 0, 0, 0],             # red
-    'issuer_address': [0, 1, 0, 0],     # green
-    'issuer_phone': [0, 0, 1, 0],       # blue
-    'invoice_n': [1, 1, 0, 0],          # yellow
-    'date': [0, 1, 1, 0],               # cyan
-    'billed_to': [1, 0, 1, 0],          # magenta
-    'billing_address': [1, 0.5, 0, 0],  # orange
-    'total': [0.5, 0, 0.5, 0],          # purple
-    'data': [1, 0.71, 0.76, 0],         # pink
-    'irrelevant': [0, 0, 0, 0],         # black
+    'issuer':          [1, 0, 0, 0],        # red
+    'issuer_address':  [0, 1, 0, 0],        # green
+    'issuer_phone':    [0, 0, 1, 0],        # blue
+    'invoice_n':       [1, 1, 0, 0],        # yellow
+    'date':            [0, 1, 1, 0],        # cyan
+    'billed_to':       [1, 0, 1, 0],        # magenta
+    'billing_address': [1, 0.5, 0, 0],      # orange
+    'total':           [0.5, 0, 0.5, 0],    # purple
+    'data':            [1, 0.71, 0.76, 0],  # pink
+    'irrelevant':      [0, 0, 0, 0],        # black
 }
 
 GENERAL_LABELS = ['issuer',

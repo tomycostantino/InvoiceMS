@@ -24,7 +24,9 @@ class RandomForestModel(BaseModel):
         :param y_train:
         :return:
         '''
+        print('Pre processing data')
         X_train_preprocessed = self.preprocess_data(X_train)
+        print('Training started')
         self.pipeline.fit(X_train_preprocessed, y_train)
 
     def predict(self, X_test):
@@ -33,6 +35,7 @@ class RandomForestModel(BaseModel):
         :param X_test:
         :return:
         '''
+        print('Predicting...')
         X_test_preprocessed = self.preprocess_data(X_test)
         return self.pipeline.predict(X_test_preprocessed)
 
