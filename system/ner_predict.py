@@ -16,7 +16,7 @@ def predict(model, text):
 
 if __name__ == "__main__":
     reader = PDFDataReader()
-    model_path = "/Users/tomasc/PycharmProjects/IMS/InvoiceMS/models/ner_multi"
+    model_path = "/models/saved_models/ner_multi"
     model = load_model(model_path)
 
     for text in reader.retrieve_text_blocks(

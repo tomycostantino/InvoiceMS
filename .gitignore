@@ -19,4 +19,4 @@ __pycache__
 /invoices/invoice_template_3/generated_pdf/
 /invoices/invoice_template_5/labelled_pdf/
 /invoices/invoice_template_3/labelled_pdf/
-/models/ner_multi/
+/models/saved_models/ner_multi/

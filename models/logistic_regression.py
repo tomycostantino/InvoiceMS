@@ -24,8 +24,8 @@ class LogisticRegressionModel(BaseModel):
         :param y_train:
         :return:
         '''
-        X_train_preprocessed = self.preprocess_data(X_train)
-        self.pipeline.fit(X_train_preprocessed, y_train)
+        # X_train_preprocessed = self.preprocess_data(X_train)
+        self.pipeline.fit(X_train, y_train)
 
     def predict(self, X_test):
         '''
@@ -46,6 +46,8 @@ if __name__ == '__main__':
 
     # Shuffle the data
     data = data.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    data = model.preprocess_data(data)  # Add this line to preprocess the data before creating X and y
 
     # Split the data into training and testing sets
     X = data[['word', 'coordinates']]
