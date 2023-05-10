@@ -5,11 +5,11 @@ from document_processing.pdf_reader import PDFDataReader
 
 
 def read_csv(file):
-    '''
-    will get all rows from the csv that contains the data present in the invoices
+    """
+    Get all rows from the CSV that contains the data present in the invoices
     :param file:
     :return:
-    '''
+    """
 
     try:
         with open(file, 'r') as f:
@@ -25,10 +25,10 @@ def read_csv(file):
 
 
 def match_pdfname_to_row(filename):
-    '''
-    pdf filename must be the pdf number, so it matches the row
+    """
+    PDF filename is the pdf number, so make it match the row in the CSV
     :return:
-    '''
+    """
 
     pdf_name = filename.split('/')[-1]
     pdf_name = pdf_name.split('.')[0]
@@ -37,7 +37,7 @@ def match_pdfname_to_row(filename):
 
 def read_pdf_blocks(file):
     """
-    Reads blocks instead of words for NER
+    Reads blocks of words to perform NER
     :param file:
     :return:
     """
@@ -49,6 +49,14 @@ def read_pdf_blocks(file):
 
 
 def label_substring_in_string(string, substring, label):
+    """
+    Find the substring and create the label dict to train the model
+    :param string:
+    :param substring:
+    :param label:
+    :return:
+    """
+
     start_index = string.find(substring)
     end_index = start_index + len(substring)
     return {
@@ -58,9 +66,10 @@ def label_substring_in_string(string, substring, label):
 
 def label_document(file, row_data):
     """
-    Label doc by doc
+    Label individual document in a folder
     :return:
     """
+
     labels = []
 
     text_blocks = read_pdf_blocks(file)
@@ -73,10 +82,6 @@ def label_document(file, row_data):
             labels.append(
                 (block.lower(), label_substring_in_string(block.lower(), row_data['billed_to'].lower(), 'PERSON')))
 
-        elif block.lower().__contains__(row_data['date'].lower()):
-            labels.append(
-                (block.lower(), label_substring_in_string(block.lower(), row_data['date'].lower(), 'DATE')))
-
         else:
             labels.append((block.lower(), {'entities': []}))
 
@@ -84,6 +89,11 @@ def label_document(file, row_data):
 
 
 def run_ner_labelling(data_folder):
+    """
+    Label all invoices folder by folder
+    :param data_folder:
+    :return:
+    """
 
     train_data = []
 

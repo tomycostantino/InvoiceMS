@@ -3,6 +3,7 @@ import plac
 import random
 from pathlib import Path
 import spacy
+from sklearn.model_selection import train_test_split
 from spacy.util import minibatch, compounding
 from spacy.training.example import Example
 from tqdm import tqdm
@@ -10,6 +11,23 @@ from labeller.ner_labeller import run_ner_labelling
 
 
 def train_model(model, TRAIN_DATA, n_iter, output_dir):
+    """
+    Training of NER
+    :param model:
+    :param TRAIN_DATA:
+    :param n_iter:
+    :param output_dir:
+    :return:
+    """
+
+    # Split dataset to train and validate to decide best model
+    TRAIN_DATA, VALID_DATA = train_test_split(TRAIN_DATA, test_size=0.2)
+
+    # Declare parameters that will hold the current best model
+    best_loss = float('inf')
+    best_model = None
+    best_model_itn = None
+    best_model_loss = None
 
     if model is not None:
         nlp = spacy.load(model)
@@ -24,7 +42,7 @@ def train_model(model, TRAIN_DATA, n_iter, output_dir):
         ner = nlp.get_pipe('ner')
 
     for _, annotations in TRAIN_DATA:
-        for ent in annotations['entities']:  # Change this line
+        for ent in annotations['entities']:
             ner.add_label(ent[2])
 
     other_pipes = [pipe for pipe in nlp.pipe_names if pipe != 'ner']
@@ -45,17 +63,37 @@ def train_model(model, TRAIN_DATA, n_iter, output_dir):
             for batch in tqdm(batches):
                 nlp.update(batch, drop=0.5, losses=losses)
 
+            print(f'Iteration n: {itn}')
             print(losses)
+
+            scores = nlp.evaluate(examples)
+            total_loss = 1 - scores.get('ents_f', 1)  # Calculate total_loss as 1 - overall F-score
+
+            if total_loss < best_loss:
+                best_loss = total_loss
+                best_model = nlp
+                best_model_itn = itn
+                best_model_loss = losses
+
+        nlp = best_model
 
     if output_dir is not None:
         output_dir = Path(output_dir)
         if not output_dir.exists():
             output_dir.mkdir()
+
+        print(f'Saving model of iteration {best_model_itn} with loss of {best_model_loss}')
         nlp.to_disk(output_dir)
         print("Saved model to", output_dir)
 
 
 def clean_dataset(dataset):
+    """
+    Check the dataset for irregularities and drop them if they exist
+    :param dataset:
+    :return:
+    """
+
     cleaned_dataset = []
     for data_point in dataset:
         # Check if the data_point is a tuple of length 2
@@ -90,7 +128,7 @@ if __name__ == '__main__':
     data = run_ner_labelling('../invoices')
     data = clean_dataset(data)  # Clean the dataset before using it
     model = None
-    output_dir = Path('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/models/ner_multi')
-    n_iter = 20
+    output_dir = Path('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/models/ner_multi_1')
+    n_iter = 25
 
-    train_model(model, data, n_iter, output_dir)
+    train_model(model, data[:int(len(data)/2)], n_iter, output_dir)

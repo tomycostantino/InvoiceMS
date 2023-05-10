@@ -16,10 +16,11 @@ def predict(model, text):
 
 if __name__ == "__main__":
     reader = PDFDataReader()
-    model_path = "/Users/tomasc/PycharmProjects/IMS/InvoiceMS/models"
+    model_path = "/Users/tomasc/PycharmProjects/IMS/InvoiceMS/models/ner_multi"
     model = load_model(model_path)
 
-    for text in reader.retrieve_text_blocks('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoices/invoice_template_1/generated_pdf/1.pdf'):
+    for text in reader.retrieve_text_blocks(
+            '/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoices/invoice_template_1/generated_pdf/1.pdf'):
         if isinstance(text, str):
             predictions = predict(model, text)
 
