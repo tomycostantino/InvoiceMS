@@ -213,9 +213,6 @@ class DataLabeller:
         # don't include the first element as it will be 0 because of being same word
         return sorted_list[1:n + 1]
 
-    def _determine_label(self, row):
-        pass
-
     def _build_label_dict(self, row_n: int, word) -> typing.Union[dict, None]:
         '''
         Generates the dict to label a word on the doc
@@ -420,7 +417,8 @@ class DataLabeller:
         :return:
         '''
 
-        pdf_name = self._current_pdf_filename.split('.')[0]
+        pdf_name = self._current_pdf_filename.split('/')[-1]
+        pdf_name = pdf_name.split('.')[0]
         return int(pdf_name) - 1
 
     def _label_document(self):

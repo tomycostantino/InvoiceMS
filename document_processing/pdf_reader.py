@@ -54,6 +54,8 @@ class PDFDataReader:
         # Step 3: Replace multiple spaces with a single space
         blocks = [re.sub(' +', ' ', s) for s in blocks]
 
+        blocks = [s.replace('\n', '') for s in blocks]
+
         return blocks
 
     def _round_coordinates(self, coordinates):
