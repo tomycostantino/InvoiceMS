@@ -20,3 +20,5 @@ __pycache__
 /invoices/invoice_template_5/labelled_pdf/
 /invoices/invoice_template_3/labelled_pdf/
 /models/saved_models/ner_multi/
+/system/gpt_key.py
+/models/saved_models/
