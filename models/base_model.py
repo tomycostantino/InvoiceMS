@@ -32,10 +32,11 @@ class BaseModel:
         # open datasets and concatenate into one
         data_frames = [pd.read_csv(file) for file in csv_files]
         data = pd.concat(data_frames, ignore_index=True)
-        print("Merged data:")
-        print(data.head())
+
         # Shuffle the data and return
-        return data.sample(frac=1, random_state=42).reset_index(drop=True)
+        data = data.sample(frac=1, random_state=42).reset_index(drop=True)
+
+        return data
 
     def create_train_test_dataset(self, csv_folder, test_size=0.2):
         '''
@@ -49,13 +50,13 @@ class BaseModel:
         y = df["label"]
         return train_test_split(X, y, test_size=test_size, random_state=42)
 
-
     def preprocess_data(self, df):
         '''
         prepare data for model to be trained or to predict
         :param df:
         :return:
         '''
+
         df["coordinates"] = df["coordinates"].apply(lambda x: x.strip("()"))
         df["coordinates"] = df["coordinates"].apply(lambda x: x.replace(",", ""))
         df["word_coordinates"] = df["word"] + " " + df["coordinates"]

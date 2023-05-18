@@ -51,12 +51,23 @@ class PDFDataReader:
         # Step 2: Filter out empty strings
         blocks = [s for s in blocks if s]
 
-        # Step 3: Replace multiple spaces with a single space
+        # Step 3: Replace new lines for a space
+        blocks = [s.replace('\n', ' ') for s in blocks]
+
+        # Step 4: Replace multiple spaces with a single space
         blocks = [re.sub(' +', ' ', s) for s in blocks]
 
-        blocks = [s.replace('\n', '') for s in blocks]
+        return self._filter_blocks(blocks)
 
-        return blocks
+    def _filter_blocks(self, list):
+        """
+        :param list:
+        :return:
+        """
+
+        pattern = r"<image: DeviceRGB, width: \d+, height: \d+, bpc: \d+>"
+        filtered_list = [item for item in list if not re.match(pattern, item)]
+        return filtered_list
 
     def _round_coordinates(self, coordinates):
         '''
@@ -73,7 +84,7 @@ class PDFDataReader:
 
 if __name__ == '__main__':
     reader = PDFDataReader()
-    text = reader.retrieve_text_blocks('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/invoices/invoice_template_5/generated_pdf/10.pdf')
+    text = reader.retrieve_text_blocks('/Users/tomasc/PycharmProjects/IMS/invoices_templates/PDF/10.pdf')
     text = [s.replace('\n', '') for s in text]
     for t in text:
         print(t)

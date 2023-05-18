@@ -128,7 +128,7 @@ if __name__ == '__main__':
     data = run_ner_labelling('../invoices')
     data = clean_dataset(data)  # Clean the dataset before using it
     model = None
-    output_dir = Path('/Users/tomasc/PycharmProjects/IMS/InvoiceMS/models/ner_multi_1')
+    output_dir = Path('/models/saved_models/ner_multi_1')
     n_iter = 25
 
     train_model(model, data[:int(len(data)/2)], n_iter, output_dir)
